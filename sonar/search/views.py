@@ -1,7 +1,8 @@
+
 import math
-from django.shortcuts import render
+from django.shortcuts import render, redirect
 from django.views.generic import TemplateView, ListView
-from django.http import HttpResponse
+from django.http import HttpResponse, HttpResponseRedirect
 from .models import *
 from .s2agmodels import *
 import requests
@@ -17,7 +18,7 @@ def SearchResultsView(request):
     
     query = request.GET.get("q")
     offset = request.GET.get('offset')
-    
+
     url = f'https://api.semanticscholar.org/graph/v1/paper/search?query={query}&limit=25&offset={(int(offset)-1)*25}&fields=title,year,fieldsOfStudy,abstract'
     response = requests.get(url, )
     # take the data field from the response and print every element in the in it in a new line
@@ -37,3 +38,7 @@ def SearchResultsView(request):
         'offset':offset,
     }
     return HttpResponse(template.render(context, request))
+
+def add_catalog(request):
+    print(f'{request.POST["paperId"]} Added to Catalog')
+    return redirect(request.META.get('HTTP_REFERER', 'redirect_if_referer_not_found'))

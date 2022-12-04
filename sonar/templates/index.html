@@ -53,6 +53,14 @@
               <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapse{{article.s2ag_paperID}}" aria-expanded="false" aria-controls="collapse{{article.s2ag_paperID}}">
                 <strong>{{ article.title }}</strong>
               </button>
+
+                    <form action="add_catalog" method="post">
+                    {% csrf_token %}
+                    {{ form }}
+                    <input type="hidden" name="paperId" value="{{ article.s2ag_paperID  }}">
+                    <input type="submit" class="submit_btn btn label-success" value="ADD" />
+                    </form>
+
             </h2>
             <div id="collapse{{article.s2ag_paperID}}" class="accordion-collapse collapse" aria-labelledby="heading{{article.s2ag_paperID}}" data-bs-parent="#accordionExample">
               <div class="accordion-body">
