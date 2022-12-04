@@ -1,8 +1,7 @@
 from django.db import models
-from .models import *
 
-class S2AGArticleIdentifier(ArticleIdentifier):
-    s2ag_paperID = models.CharField(unique=True, max_length=255, null=False, blank=False)
+class S2AGArticleIdentifier(models.Model):
+    s2ag_paperID = models.CharField(primary_key=True, max_length=255, null=False, blank=False)
 
 class S2AGSearchDisplayArticle(S2AGArticleIdentifier):
     title = models.TextField()

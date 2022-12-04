@@ -28,7 +28,7 @@ def SearchResultsView(request):
         element['fieldsOfStudy'] = element['fieldsOfStudy'][0] if element['fieldsOfStudy'] else None
     queryset = []
     for element in data:
-        article = S2AGSearchDisplayArticle(title=element['title'], DOI='', s2ag_paperID=element['paperId'], abstract = element['abstract'])
+        article = S2AGSearchDisplayArticle(title=element['title'], s2ag_paperID=element['paperId'], abstract = element['abstract'])
         queryset.append(article)
     page_number = math.ceil(int(response.json()['total'])/25)
     context = {
