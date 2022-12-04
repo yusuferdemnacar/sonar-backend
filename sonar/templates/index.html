@@ -49,12 +49,12 @@
 <div class="accordion" id="accordionExample" style="text-align: center;">
     {% for article in object_list %}
         <div class="accordion-item" style="width: 50%;">
-            <h2 class="accordion-header" id="heading{{article.paperId}}">
-              <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapse{{article.paperId}}" aria-expanded="false" aria-controls="collapse{{article.paperId}}">
+            <h2 class="accordion-header" id="heading{{article.s2ag_paperID}}">
+              <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapse{{article.s2ag_paperID}}" aria-expanded="false" aria-controls="collapse{{article.s2ag_paperID}}">
                 <strong>{{ article.title }}</strong>
               </button>
             </h2>
-            <div id="collapse{{article.paperId}}" class="accordion-collapse collapse" aria-labelledby="heading{{article.paperId}}" data-bs-parent="#accordionExample">
+            <div id="collapse{{article.s2ag_paperID}}" class="accordion-collapse collapse" aria-labelledby="heading{{article.s2ag_paperID}}" data-bs-parent="#accordionExample">
               <div class="accordion-body">
                 {{ article.abstract }}
               </div>
