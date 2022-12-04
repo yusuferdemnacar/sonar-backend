@@ -57,7 +57,7 @@
                     <form action="add_catalog" method="post">
                     {% csrf_token %}
                     {{ form }}
-                    <input type="hidden" name="paperId" value="{{ article.paperId  }}">
+                    <input type="hidden" name="paperId" value="{{ article.s2ag_paperID  }}">
                     <input type="submit" class="submit_btn btn label-success" value="ADD" />
                     </form>
 
