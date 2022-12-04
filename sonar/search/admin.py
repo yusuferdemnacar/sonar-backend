@@ -1,9 +1,8 @@
 from django.contrib import admin
+from .models import *
+from .s2agmodels import *
 
-# Register your models here.
-from .models import Article
-
-class ArticleAdmin(admin.ModelAdmin):
+class S2AGArticleAdmin(admin.ModelAdmin):
     list_display = ("title",)
 
-admin.site.register(Article, ArticleAdmin)
+admin.site.register(S2AGSearchDisplayArticle, S2AGArticleAdmin)
