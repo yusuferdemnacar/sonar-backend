@@ -1,8 +1,7 @@
-
 import math
 from django.shortcuts import render, redirect
 from django.views.generic import TemplateView, ListView
-from django.http import HttpResponse, HttpResponseRedirect
+from django.http import JsonResponse, HttpResponse, HttpResponseRedirect
 from .models import *
 from .s2agmodels import *
 import requests
@@ -42,3 +41,17 @@ def SearchResultsView(request):
 def add_catalog(request):
     print(f'{request.POST["paperId"]} Added to Catalog')
     return redirect(request.META.get('HTTP_REFERER', 'redirect_if_referer_not_found'))
+
+def createCatalogBase(request):
+
+    user = User.objects.get(id=1)
+    
+    catalog_name = request.POST['catalog_name']
+
+    catalog_base = CatalogBase(catalog_name=catalog_name, owner=user)
+    
+    try:
+        catalog_base.save()
+        return JsonResponse({"info": "Catalog created successfully", "id": catalog_base.id}, status=200)
+    except:
+        return JsonResponse({"info": "Catalog creation failed"}, status=400)
