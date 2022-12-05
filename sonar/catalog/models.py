@@ -4,7 +4,7 @@ from s2ag.models import *
 
 class CatalogAbstract(models.Model):
     owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name="users_%(class)s")
-    s2ag_papers = models.ManyToManyField(S2AGArticleIdentifier, related_name="s2ag_papers_%(class)s")
+    s2ag_paper_identifiers = models.ManyToManyField(S2AGArticleIdentifier, related_name="s2ag_papers_%(class)s")
 
     class Meta:
         abstract = True
