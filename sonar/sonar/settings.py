@@ -33,6 +33,8 @@ ALLOWED_HOSTS = ["*"]
 
 INSTALLED_APPS = [
     'search',
+    's2ag',
+    'catalog',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',

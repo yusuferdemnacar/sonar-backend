@@ -1,57 +1,37 @@
 import math
-from django.shortcuts import render, redirect
-from django.views.generic import TemplateView, ListView
-from django.http import JsonResponse, HttpResponse, HttpResponseRedirect
-from .models import *
-from .s2agmodels import *
 import requests
-import json
-from django.template import loader
+from rest_framework.response import Response
+from rest_framework.views import APIView
+from .models import *
+from s2ag.models import *
+from s2ag.serializers import *
 
-class HomePageView(TemplateView):
-    template_name = 'index.html'
+class S2AGSearchView(APIView):
 
-def SearchResultsView(request):
-    template_name = 'index.html'
-    template = loader.get_template(template_name=template_name)
-    
-    query = request.GET.get("q")
-    offset = request.GET.get('offset')
+    def get(self, request):
+        
+        search_query = request.GET.get('search_query', None)
+        offset = request.GET.get('offset', None)
 
-    url = f'https://api.semanticscholar.org/graph/v1/paper/search?query={query}&limit=25&offset={(int(offset)-1)*25}&fields=title,year,fieldsOfStudy,abstract'
-    response = requests.get(url, )
-    # take the data field from the response and print every element in the in it in a new line
-    data = response.json()['data']
-    # assign the element's fieldOfStudy to its 0th element
-    for element in data:
-        element['fieldsOfStudy'] = element['fieldsOfStudy'][0] if element['fieldsOfStudy'] else None
-    queryset = []
-    for element in data:
-        article = S2AGSearchDisplayArticle(title=element['title'], s2ag_paperID=element['paperId'], abstract = element['abstract'])
-        queryset.append(article)
-    page_number = math.ceil(int(response.json()['total'])/25)
-    context = {
-        'object_list': queryset,
-        'page_number' : page_number,
-        'query':query,
-        'offset':offset,
-    }
-    return HttpResponse(template.render(context, request))
+        url = f'https://api.semanticscholar.org/graph/v1/paper/search?query={search_query}&limit=25&offset={(int(offset)-1)*25}&fields=title,year,fieldsOfStudy,abstract'
 
-def add_catalog(request):
-    print(f'{request.POST["paperId"]} Added to Catalog')
-    return redirect(request.META.get('HTTP_REFERER', 'redirect_if_referer_not_found'))
+        s2ag_response = requests.get(url)
+        s2ag_response_data = s2ag_response.json()["data"]
 
-def createCatalogBase(request):
+        search_results = []
 
-    user = User.objects.get(id=1)
-    
-    catalog_name = request.POST['catalog_name']
+        for paper in s2ag_response_data:
+            paper["fieldsOfStudy"] = paper["fieldsOfStudy"][0] if paper["fieldsOfStudy"] else None
+            article = S2AGSearchDisplayArticle(title=paper['title'], s2ag_paperID=paper['paperId'], abstract = paper['abstract'])
+            search_results.append(S2AGSearchDisplayArticleSerializer(article).data)            
 
-    catalog_base = CatalogBase(catalog_name=catalog_name, owner=user)
-    
-    try:
-        catalog_base.save()
-        return JsonResponse({"info": "Catalog created successfully", "id": catalog_base.id}, status=200)
-    except:
-        return JsonResponse({"info": "Catalog creation failed"}, status=400)
+        total_page_count = math.ceil(int(s2ag_response.json()['total'])/25)
+
+        response_data = {
+            "search_results": search_results,
+            "total_page_count": total_page_count,
+            "search_query": search_query,
+            "offset": offset
+        }
+
+        return Response(response_data)
