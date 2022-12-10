@@ -21,6 +21,7 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path("search/", include("search.urls")),
     path("catalog/", include("catalog.urls")),
+    path("authmngr/", include("authmngr.urls")),
 ]
 
 
