@@ -1,17 +1,19 @@
 from rest_framework.views import APIView
 from django.contrib.auth.models import User
 from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
 from .models import *
 
 class CatalogBaseView(APIView):
+
+    permission_classes = (IsAuthenticated,)
 
     def get(self, request):
         pass
 
     def post(self, request):
         
-        # Until authentication is added
-        user = User.objects.get(id=1)
+        user = request.user
         catalog_name = request.POST.get('catalog_name', None)
 
         if catalog_name is None:
@@ -30,6 +32,8 @@ class CatalogBaseView(APIView):
         pass
 
 class CatalogExtensionView(APIView):
+
+    permission_classes = (IsAuthenticated,)
 
     def get(self, request):
         pass
