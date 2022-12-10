@@ -12,5 +12,8 @@ class CatalogAbstract(models.Model):
 class CatalogBase(CatalogAbstract):
     catalog_name = models.CharField(max_length=255, null=False, blank=False)
 
+    class Meta:
+        unique_together = ('owner', 'catalog_name')
+
 class CatalogExtension(CatalogAbstract):
     catalog_base = models.ForeignKey(CatalogBase, on_delete=models.CASCADE, related_name="catalog_extensions")
