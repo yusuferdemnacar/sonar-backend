@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from django.contrib.auth.models import User
 
-class RegisterSerializer(serializers.Serializer):
+class UserSerializer(serializers.Serializer):
 
     username = serializers.CharField(min_length=4, max_length=16)
     email = serializers.EmailField()
