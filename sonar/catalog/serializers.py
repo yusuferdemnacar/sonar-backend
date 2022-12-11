@@ -15,9 +15,8 @@ class CatalogBaseSerializer(serializers.Serializer):
 class CatalogExtensionSerializer(serializers.Serializer):
 
     catalog_base = CatalogBaseSerializer(many=False)
-    owner = UserSerializer(many=False)
 
     class Meta:
         model = CatalogExtension
         unique_together = ('owner', 'catalog_base')
-        fields = ('owner', 'catalog_base')
+        fields = ('catalog_base')
