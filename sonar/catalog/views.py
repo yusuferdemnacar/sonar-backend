@@ -133,7 +133,24 @@ class CatalogExtensionView(APIView):
         return Response(catalog_extension_serialized.data, status=status.HTTP_200_OK)
 
     def post(self, request):
-        pass
+        
+        user = request.user
+        catalog_name = request.data.get('catalog_name', None)
+        catalog_base = CatalogBase.objects.filter(owner=user, catalog_name=catalog_name).first()
+
+        if not catalog_base:
+            return Response({'error': 'catalog base not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        catalog_extension = catalog_base.catalog_extensions.first()
+
+        catalog_extension, created = CatalogExtension.objects.get_or_create(catalog_base=catalog_base)
+
+        if not created:
+            return Response({'error': 'catalog extension already exists'}, status=400)
+
+        catalog_extension.save()
+
+        return Response({"info": "catalog extension creation successful", "catalog_extension_id": catalog_extension.id}, status=200)
 
     def put(self, request):
         pass
