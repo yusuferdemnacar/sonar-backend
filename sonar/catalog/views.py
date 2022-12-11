@@ -95,7 +95,21 @@ class CatalogBaseView(APIView):
             return Response({"info": "s2ag_paper_id: " + s2ag_paper_id + " removed from catalog base"}, status=200)
 
     def delete(self, request):
-        pass
+        
+        user = request.user
+        catalog_name = request.data.get('catalog_name', None)
+
+        if catalog_name is None:
+            return Response({'error': 'catalog_name is required'}, status=400)
+
+        catalog_base = CatalogBase.objects.filter(owner=user, catalog_name=catalog_name).first()
+
+        if not catalog_base:
+            return Response({'error': 'catalog base not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        catalog_base.delete()
+
+        return Response({"info": "catalog base deleted"}, status=200)
 
 class CatalogExtensionView(APIView):
 
