@@ -30,7 +30,10 @@ class CatalogBaseView(APIView):
         if catalog_name is None:
             return Response({'error': 'catalog_name is required'}, status=400)
 
-        catalog_base = CatalogBase.objects.create(owner=user, catalog_name=catalog_name)
+        catalog_base, created = CatalogBase.objects.get_or_create(owner=user, catalog_name=catalog_name)
+
+        if not created:
+            return Response({'error': 'catalog base already exists'}, status=400)
 
         catalog_base.save()
 
