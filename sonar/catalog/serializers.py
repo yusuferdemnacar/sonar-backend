@@ -11,3 +11,13 @@ class CatalogBaseSerializer(serializers.Serializer):
         model = CatalogBase
         unique_together = ('owner', 'catalog_name')
         fields = ('owner', 'catalog_name')
+
+class CatalogExtensionSerializer(serializers.Serializer):
+
+    catalog_base = CatalogBaseSerializer(many=False)
+    owner = UserSerializer(many=False)
+
+    class Meta:
+        model = CatalogExtension
+        unique_together = ('owner', 'catalog_base')
+        fields = ('owner', 'catalog_base')

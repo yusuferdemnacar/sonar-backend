@@ -116,7 +116,21 @@ class CatalogExtensionView(APIView):
     permission_classes = (IsAuthenticated,)
 
     def get(self, request):
-        pass
+        
+        user = request.user
+        catalog_name = request.query_params.get('catalog_name', None)
+        catalog_base = CatalogBase.objects.filter(owner=user, catalog_name=catalog_name).first()
+
+        if not catalog_base:
+            return Response({'error': 'catalog base not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        catalog_extension = catalog_base.catalog_extensions.first()
+        
+        if not catalog_extension:
+            return Response({'error': 'catalog extension of ' + catalog_name + ' not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        catalog_extension_serialized = CatalogExtensionSerializer(instance=catalog_extension)
+        return Response(catalog_extension_serialized.data, status=status.HTTP_200_OK)
 
     def post(self, request):
         pass
