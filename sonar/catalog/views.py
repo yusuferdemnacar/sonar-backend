@@ -65,6 +65,9 @@ class CatalogBaseView(APIView):
 
             s2ag_paper_identifier, _ = S2AGArticleIdentifier.objects.get_or_create(s2ag_paperID=s2ag_paper_id)
             
+            if s2ag_paper_identifier in catalog_base.s2ag_paper_identifiers.all():
+                return Response({'error': 's2ag_paper_id: ' + s2ag_paper_id + ' already in catalog base: ' + catalog_name}, status=400)
+
             catalog_base.s2ag_paper_identifiers.add(s2ag_paper_identifier)
 
             catalog_base.save()
