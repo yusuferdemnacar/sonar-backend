@@ -180,7 +180,7 @@ class CatalogExtensionView(APIView):
 
             s2ag_paper_id_list = [s2ag_paper_identifier.s2ag_paperID for s2ag_paper_identifier in catalog_base.s2ag_paper_identifiers.all()]
 
-            s2ag_paper_citation_identifiers = set()
+            s2ag_inbound_citation_identifiers = set()
 
             for s2ag_paper_id in s2ag_paper_id_list:
 
@@ -211,7 +211,7 @@ class CatalogExtensionView(APIView):
 
                                     if s2ag_citing_paper_id is not None:
 
-                                        s2ag_paper_citation_identifiers.add(S2AGArticleIdentifier(s2ag_paperID=s2ag_citing_paper_id))
+                                        s2ag_inbound_citation_identifiers.add(S2AGArticleIdentifier(s2ag_paperID=s2ag_citing_paper_id))
 
                         is_there_next = s2ag_inbound_citations_lookup_json.get('next', None)
 
@@ -220,7 +220,7 @@ class CatalogExtensionView(APIView):
                         else:
                             next = False
 
-            created = S2AGArticleIdentifier.objects.bulk_create(s2ag_paper_citation_identifiers, ignore_conflicts=True)
+            created = S2AGArticleIdentifier.objects.bulk_create(s2ag_inbound_citation_identifiers, ignore_conflicts=True)
             catalog_extension.s2ag_paper_identifiers.add(*created)
 
             return Response({"info": "s2ag inbound citations added"}, status=status.HTTP_200_OK)
