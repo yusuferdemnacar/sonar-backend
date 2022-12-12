@@ -30,16 +30,16 @@ class CatalogBaseView(APIView):
         catalog_name = request.POST.get('catalog_name', None)
 
         if catalog_name is None:
-            return Response({'error': 'catalog_name is required'}, status=400)
+            return Response({'error': 'catalog_name is required'}, status=status.HTTP_400_BAD_REQUEST)
 
         catalog_base, created = CatalogBase.objects.get_or_create(owner=user, catalog_name=catalog_name)
 
         if not created:
-            return Response({'error': 'catalog base already exists'}, status=400)
+            return Response({'error': 'catalog base already exists'}, status=status.HTTP_400_BAD_REQUEST)
 
         catalog_base.save()
 
-        return Response({"info": "catalog base creation successful", "catalog_id": catalog_base.id}, status=200)
+        return Response({"info": "catalog base creation successful", "catalog_id": catalog_base.id}, status=status.HTTP_200_OK)
 
     def put(self, request):
         
@@ -48,10 +48,10 @@ class CatalogBaseView(APIView):
         edit_type = request.data.get('edit_type', None)
 
         if catalog_name is None:
-            return Response({'error': 'catalog_name is required'}, status=400)
+            return Response({'error': 'catalog_name is required'}, status=status.HTTP_400_BAD_REQUEST)
 
         if edit_type is None:
-            return Response({'error': 'edit_type is required'}, status=400)
+            return Response({'error': 'edit_type is required'}, status=status.HTTP_400_BAD_REQUEST)
 
         catalog_base = CatalogBase.objects.filter(owner=user, catalog_name=catalog_name).first()
 
@@ -63,38 +63,38 @@ class CatalogBaseView(APIView):
             s2ag_paper_id = request.data.get('s2ag_paper_id', None)
 
             if s2ag_paper_id is None:
-                return Response({'error': 's2ag_paper_id is required'}, status=400)
+                return Response({'error': 's2ag_paper_id is required'}, status=status.HTTP_400_BAD_REQUEST)
 
             s2ag_paper_identifier, _ = S2AGArticleIdentifier.objects.get_or_create(s2ag_paperID=s2ag_paper_id)
             
             if s2ag_paper_identifier in catalog_base.s2ag_paper_identifiers.all():
-                return Response({'error': 's2ag_paper_id: ' + s2ag_paper_id + ' already in catalog base: ' + catalog_name}, status=400)
+                return Response({'error': 's2ag_paper_id: ' + s2ag_paper_id + ' already in catalog base: ' + catalog_name}, status=status.HTTP_400_BAD_REQUEST)
 
             catalog_base.s2ag_paper_identifiers.add(s2ag_paper_identifier)
 
             catalog_base.save()
 
-            return Response({"info": "s2ag_paper_id: " + s2ag_paper_id + " added to catalog base: " + catalog_name}, status=200)
+            return Response({"info": "s2ag_paper_id: " + s2ag_paper_id + " added to catalog base: " + catalog_name}, status=status.HTTP_200_OK)
 
         if edit_type == "remove_s2ag_paper_id":
 
             s2ag_paper_id = request.data.get('s2ag_paper_id', None)
 
             if s2ag_paper_id is None:
-                return Response({'error': 's2ag_paper_id is required'}, status=400)
+                return Response({'error': 's2ag_paper_id is required'}, status=status.HTTP_400_BAD_REQUEST)
 
             catalog_base_s2ag_paper_identifiers = catalog_base.s2ag_paper_identifiers.all()
 
             s2ag_paper_identifier = S2AGArticleIdentifier.objects.filter(s2ag_paperID=s2ag_paper_id).first()
 
             if s2ag_paper_identifier not in catalog_base_s2ag_paper_identifiers:
-                return Response({'error': 's2ag_paper_id: ' + s2ag_paper_id + ' not in catalog base'}, status=400)
+                return Response({'error': 's2ag_paper_id: ' + s2ag_paper_id + ' not in catalog base'}, status=status.HTTP_400_BAD_REQUEST)
             
             catalog_base.s2ag_paper_identifiers.remove(s2ag_paper_identifier)
 
             catalog_base.save()
 
-            return Response({"info": "s2ag_paper_id: " + s2ag_paper_id + " removed from catalog base"}, status=200)
+            return Response({"info": "s2ag_paper_id: " + s2ag_paper_id + " removed from catalog base"}, status=status.HTTP_200_OK)
 
     def delete(self, request):
         
@@ -102,7 +102,7 @@ class CatalogBaseView(APIView):
         catalog_name = request.data.get('catalog_name', None)
 
         if catalog_name is None:
-            return Response({'error': 'catalog_name is required'}, status=400)
+            return Response({'error': 'catalog_name is required'}, status=status.HTTP_400_BAD_REQUEST)
 
         catalog_base = CatalogBase.objects.filter(owner=user, catalog_name=catalog_name).first()
 
@@ -111,7 +111,7 @@ class CatalogBaseView(APIView):
 
         catalog_base.delete()
 
-        return Response({"info": "catalog base deleted"}, status=200)
+        return Response({"info": "catalog base deleted"}, status=status.HTTP_200_OK)
 
 class CatalogExtensionView(APIView):
 
@@ -148,11 +148,11 @@ class CatalogExtensionView(APIView):
         catalog_extension, created = CatalogExtension.objects.get_or_create(catalog_base=catalog_base)
 
         if not created:
-            return Response({'error': 'catalog extension already exists'}, status=400)
+            return Response({'error': 'catalog extension already exists'}, status=status.HTTP_400_BAD_REQUEST)
 
         catalog_extension.save()
 
-        return Response({"info": "catalog extension creation successful", "catalog_extension_id": catalog_extension.id}, status=200)
+        return Response({"info": "catalog extension creation successful", "catalog_extension_id": catalog_extension.id}, status=status.HTTP_200_OK)
 
     def put(self, request):
         
