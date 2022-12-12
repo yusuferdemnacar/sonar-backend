@@ -5,6 +5,8 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework import status
 from .serializers import *
 from .models import *
+import requests
+from termcolor import colored
 
 class CatalogBaseView(APIView):
 
@@ -153,7 +155,81 @@ class CatalogExtensionView(APIView):
         return Response({"info": "catalog extension creation successful", "catalog_extension_id": catalog_extension.id}, status=200)
 
     def put(self, request):
-        pass
+        
+        user = request.user
+        catalog_name = request.data.get('catalog_name', None)
+        edit_type = request.data.get('edit_type', None)
+
+        if catalog_name is None:
+            return Response({'error': 'catalog_name is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if edit_type is None:
+            return Response({'error': 'edit_type is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        catalog_base = CatalogBase.objects.filter(owner=user, catalog_name=catalog_name).first()
+
+        if not catalog_base:
+            return Response({'error': 'catalog base not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        catalog_extension = catalog_base.catalog_extensions.first()
+
+        if not catalog_extension:
+            return Response({'error': 'catalog extension of ' + catalog_name + ' not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        if edit_type == "add_inbound_s2ag_citations":
+
+            s2ag_paper_id_list = [s2ag_paper_identifier.s2ag_paperID for s2ag_paper_identifier in catalog_base.s2ag_paper_identifiers.all()]
+
+            s2ag_paper_citation_identifiers = set()
+
+            for s2ag_paper_id in s2ag_paper_id_list:
+
+                offset = 0
+
+                next = True
+
+                while next:
+
+                    s2ag_inbound_citations_lookup_url = "https://api.semanticscholar.org/graph/v1/paper/" + s2ag_paper_id + "/citations?fields=paperId&limit=1000&offset=" + str(offset)
+                    s2ag_inbound_citations_lookup_response = requests.get(s2ag_inbound_citations_lookup_url)
+
+                    if s2ag_inbound_citations_lookup_response.status_code == 200:
+
+                        s2ag_inbound_citations_lookup_json = s2ag_inbound_citations_lookup_response.json()
+
+                        s2ag_paper_citations = s2ag_inbound_citations_lookup_json.get('data', None)
+                        
+                        if s2ag_paper_citations is not None:
+
+                            for s2ag_paper_citation in s2ag_paper_citations:
+
+                                s2ag_citing_paper = s2ag_paper_citation.get('citingPaper', None)
+
+                                if s2ag_citing_paper is not None:
+
+                                    s2ag_citing_paper_id = s2ag_citing_paper.get('paperId', None)
+
+                                    if s2ag_citing_paper_id is not None:
+
+                                        s2ag_paper_citation_identifiers.add(S2AGArticleIdentifier(s2ag_paperID=s2ag_citing_paper_id))
+
+                        is_there_next = s2ag_inbound_citations_lookup_json.get('next', None)
+
+                        if is_there_next is not None:
+                            offset += 1000
+                        else:
+                            next = False
+
+            created = S2AGArticleIdentifier.objects.bulk_create(s2ag_paper_citation_identifiers, ignore_conflicts=True)
+            catalog_extension.s2ag_paper_identifiers.add(*created)
+
+            return Response({"info": "s2ag inbound citations added"}, status=status.HTTP_200_OK)
+
+        if edit_type == "add_outbound_s2ag_citations":
+            pass
+
+        if edit_type == "remove_s2ag_paper_id":
+            pass
 
     def delete(self, request):
         pass
