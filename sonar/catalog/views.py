@@ -226,7 +226,53 @@ class CatalogExtensionView(APIView):
             return Response({"info": "s2ag inbound citations added"}, status=status.HTTP_200_OK)
 
         if edit_type == "add_outbound_s2ag_citations":
-            pass
+            
+            s2ag_paper_id_list = [s2ag_paper_identifier.s2ag_paperID for s2ag_paper_identifier in catalog_base.s2ag_paper_identifiers.all()]
+
+            s2ag_outbound_citation_identifiers = set()
+
+            for s2ag_paper_id in s2ag_paper_id_list:
+
+                offset = 0
+
+                next = True
+
+                while next:
+
+                    s2ag_outbound_citations_lookup_url = "https://api.semanticscholar.org/graph/v1/paper/" + s2ag_paper_id + "/references?fields=paperId&limit=1000&offset=" + str(offset)
+                    s2ag_outbound_citations_lookup_response = requests.get(s2ag_outbound_citations_lookup_url)
+
+                    if s2ag_outbound_citations_lookup_response.status_code == 200:
+
+                        s2ag_outbound_citations_lookup_json = s2ag_outbound_citations_lookup_response.json()
+
+                        s2ag_paper_references = s2ag_outbound_citations_lookup_json.get('data', None)
+                        
+                        if s2ag_paper_references is not None:
+
+                            for s2ag_paper_reference in s2ag_paper_references:
+
+                                s2ag_referenced_paper = s2ag_paper_reference.get('citedPaper', None)
+
+                                if s2ag_referenced_paper is not None:
+
+                                    s2ag_referenced_paper_id = s2ag_referenced_paper.get('paperId', None)
+
+                                    if s2ag_referenced_paper_id is not None:
+
+                                        s2ag_outbound_citation_identifiers.add(S2AGArticleIdentifier(s2ag_paperID=s2ag_referenced_paper_id))
+
+                        is_there_next = s2ag_outbound_citations_lookup_json.get('next', None)
+
+                        if is_there_next is not None:
+                            offset += 1000
+                        else:
+                            next = False
+
+            created = S2AGArticleIdentifier.objects.bulk_create(s2ag_outbound_citation_identifiers, ignore_conflicts=True)
+            catalog_extension.s2ag_paper_identifiers.add(*created)
+
+            return Response({"info": "s2ag outbound citations added"}, status=status.HTTP_200_OK)
 
         if edit_type == "remove_s2ag_paper_id":
             pass
