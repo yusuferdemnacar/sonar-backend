@@ -41,6 +41,7 @@ INSTALLED_APPS = [
     's2ag',
     'catalog',
     'authmngr',
+    'article',
     'rest_framework',
     'rest_framework.authtoken',
     'corsheaders',
