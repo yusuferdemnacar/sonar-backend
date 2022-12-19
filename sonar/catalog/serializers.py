@@ -1,13 +1,13 @@
 from rest_framework import serializers
 from .models import *
 from authmngr.serializers import *
-from s2ag.serializers import *
+from article.serializers import *
 
 class CatalogBaseSerializer(serializers.Serializer):
 
     catalog_name = serializers.CharField(max_length=255)
     owner = UserSerializer(many=False)
-    s2ag_paper_identifiers = S2AGArticleIdentifierSerializer(many=True)
+    articles = ArticleSerializer(many=True)
 
     class Meta:
         model = CatalogBase
@@ -17,7 +17,7 @@ class CatalogBaseSerializer(serializers.Serializer):
 class CatalogExtensionSerializer(serializers.Serializer):
 
     catalog_base = CatalogBaseSerializer(many=False)
-    s2ag_paper_identifiers = S2AGArticleIdentifierSerializer(many=True)
+    articles = ArticleSerializer(many=True)
 
     class Meta:
         model = CatalogExtension
