@@ -42,6 +42,7 @@ INSTALLED_APPS = [
     'catalog',
     'authmngr',
     'article',
+    'graph',
     'rest_framework',
     'rest_framework.authtoken',
     'corsheaders',
