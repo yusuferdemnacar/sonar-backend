@@ -15,5 +15,11 @@ class CatalogBase(CatalogAbstract):
     class Meta:
         unique_together = ('owner', 'catalog_name')
 
+    def __str__(self):
+        return "/".join([self.owner.username, self.catalog_name])
+
 class CatalogExtension(CatalogAbstract):
     catalog_base = models.ForeignKey(CatalogBase, on_delete=models.CASCADE, related_name="catalog_extensions")
+
+    def __str__(self):
+        return "/".join([str(self.catalog_base), str(self.id)])
