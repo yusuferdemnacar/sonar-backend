@@ -6,29 +6,56 @@ from .serializers import *
 from .models import *
 import requests
 
+class RequestValidator():
+
+    def validate(self, required_fields):
+
+        if None in required_fields.values():
+            missing_fields = [field_name for field_name in required_fields.keys() if required_fields.get(field_name) is None]
+            return Response({'error': 'missing form fields: ' + str(missing_fields)}, status=status.HTTP_400_BAD_REQUEST)
+
+        return None
+
 class CatalogBaseView(APIView):
 
     permission_classes = (IsAuthenticated,)
+    request_validator = RequestValidator()
 
     def get(self, request):
         
         user = request.user
         catalog_name = request.query_params.get('catalog_name', None)
+
+        fields = {
+            'catalog_name': catalog_name
+        }
+
+        validation_result = self.request_validator.validate(fields)
+
+        if validation_result:
+            return validation_result
+
         catalog_base = CatalogBase.objects.filter(owner=user, catalog_name=catalog_name).first()
 
         if not catalog_base:
             return Response({'error': 'catalog base not found'}, status=status.HTTP_404_NOT_FOUND)
-        else:
-            catalog_base_serialized = CatalogBaseSerializer(instance=catalog_base)
-            return Response(catalog_base_serialized.data, status=status.HTTP_200_OK)
+        
+        catalog_base_serialized = CatalogBaseSerializer(instance=catalog_base)
+        return Response(catalog_base_serialized.data, status=status.HTTP_200_OK)
 
     def post(self, request):
         
         user = request.user
         catalog_name = request.POST.get('catalog_name', None)
 
-        if catalog_name is None:
-            return Response({'error': 'catalog_name is required'}, status=status.HTTP_400_BAD_REQUEST)
+        fields = {
+            'catalog_name': catalog_name
+        }
+
+        validation_result = self.request_validator.validate(fields)
+
+        if validation_result:
+            return validation_result
 
         catalog_base, created = CatalogBase.objects.get_or_create(owner=user, catalog_name=catalog_name)
 
@@ -45,11 +72,15 @@ class CatalogBaseView(APIView):
         catalog_name = request.data.get('catalog_name', None)
         edit_type = request.data.get('edit_type', None)
 
-        if catalog_name is None:
-            return Response({'error': 'catalog_name is required'}, status=status.HTTP_400_BAD_REQUEST)
+        fields = {
+            'catalog_name': catalog_name,
+            'edit_type': edit_type
+        }
 
-        if edit_type is None:
-            return Response({'error': 'edit_type is required'}, status=status.HTTP_400_BAD_REQUEST)
+        validation_result = self.request_validator.validate(fields)
+
+        if validation_result:
+            return validation_result
 
         catalog_base = CatalogBase.objects.filter(owner=user, catalog_name=catalog_name).first()
 
@@ -60,8 +91,14 @@ class CatalogBaseView(APIView):
 
             s2ag_paper_id = request.data.get('s2ag_paper_id', None)
 
-            if s2ag_paper_id is None:
-                return Response({'error': 's2ag_paper_id is required'}, status=status.HTTP_400_BAD_REQUEST)
+            fields = {
+                's2ag_paper_id': s2ag_paper_id
+            }
+
+            validation_result = self.request_validator.validate(fields)
+
+            if validation_result:
+                return validation_result
 
             s2ag_paper_identifier, _ = S2AGArticleIdentifier.objects.get_or_create(s2ag_paperID=s2ag_paper_id)
             
@@ -78,8 +115,14 @@ class CatalogBaseView(APIView):
 
             s2ag_paper_id = request.data.get('s2ag_paper_id', None)
 
-            if s2ag_paper_id is None:
-                return Response({'error': 's2ag_paper_id is required'}, status=status.HTTP_400_BAD_REQUEST)
+            fields = {
+                's2ag_paper_id': s2ag_paper_id
+            }
+
+            validation_result = self.request_validator.validate(fields)
+
+            if validation_result:
+                return validation_result
 
             catalog_base_s2ag_paper_identifiers = catalog_base.s2ag_paper_identifiers.all()
 
@@ -99,8 +142,14 @@ class CatalogBaseView(APIView):
         user = request.user
         catalog_name = request.data.get('catalog_name', None)
 
-        if catalog_name is None:
-            return Response({'error': 'catalog_name is required'}, status=status.HTTP_400_BAD_REQUEST)
+        fields = {
+            'catalog_name': catalog_name
+        }
+
+        validation_result = self.request_validator.validate(fields)
+
+        if validation_result:
+            return validation_result
 
         catalog_base = CatalogBase.objects.filter(owner=user, catalog_name=catalog_name).first()
 
@@ -114,20 +163,33 @@ class CatalogBaseView(APIView):
 class CatalogExtensionView(APIView):
 
     permission_classes = (IsAuthenticated,)
+    request_validator = RequestValidator()
 
     def get(self, request):
         
         user = request.user
         catalog_name = request.query_params.get('catalog_name', None)
+        catalog_extension_id = request.query_params.get('catalog_extension_id', None)
+
+        fields = {
+            'catalog_name': catalog_name,
+            'catalog_extension_id': catalog_extension_id
+        }
+
+        validation_result = self.request_validator.validate(fields)
+
+        if validation_result:
+            return validation_result
+
         catalog_base = CatalogBase.objects.filter(owner=user, catalog_name=catalog_name).first()
 
         if not catalog_base:
             return Response({'error': 'catalog base not found'}, status=status.HTTP_404_NOT_FOUND)
 
-        catalog_extension = catalog_base.catalog_extensions.first()
+        catalog_extension = catalog_base.catalog_extensions.filter(id=catalog_extension_id).first()
         
         if not catalog_extension:
-            return Response({'error': 'catalog extension of ' + catalog_name + ' not found'}, status=status.HTTP_404_NOT_FOUND)
+            return Response({'error': 'catalog extension not found'}, status=status.HTTP_404_NOT_FOUND)
 
         catalog_extension_serialized = CatalogExtensionSerializer(instance=catalog_extension)
         return Response(catalog_extension_serialized.data, status=status.HTTP_200_OK)
@@ -136,17 +198,22 @@ class CatalogExtensionView(APIView):
         
         user = request.user
         catalog_name = request.data.get('catalog_name', None)
+
+        fields = {
+            'catalog_name': catalog_name
+        }
+
+        validation_result = self.request_validator.validate(fields)
+
+        if validation_result:
+            return validation_result
+
         catalog_base = CatalogBase.objects.filter(owner=user, catalog_name=catalog_name).first()
 
         if not catalog_base:
             return Response({'error': 'catalog base not found'}, status=status.HTTP_404_NOT_FOUND)
 
-        catalog_extension = catalog_base.catalog_extensions.first()
-
-        catalog_extension, created = CatalogExtension.objects.get_or_create(catalog_base=catalog_base)
-
-        if not created:
-            return Response({'error': 'catalog extension already exists'}, status=status.HTTP_400_BAD_REQUEST)
+        catalog_extension = CatalogExtension.objects.create(catalog_base=catalog_base)
 
         catalog_extension.save()
 
@@ -156,23 +223,29 @@ class CatalogExtensionView(APIView):
         
         user = request.user
         catalog_name = request.data.get('catalog_name', None)
+        catalog_extension_id = request.data.get('catalog_extension_id', None)
         edit_type = request.data.get('edit_type', None)
 
-        if catalog_name is None:
-            return Response({'error': 'catalog_name is required'}, status=status.HTTP_400_BAD_REQUEST)
+        fields = {
+            'catalog_name': catalog_name,
+            'catalog_extension_id': catalog_extension_id,
+            'edit_type': edit_type
+        }
 
-        if edit_type is None:
-            return Response({'error': 'edit_type is required'}, status=status.HTTP_400_BAD_REQUEST)
+        validation_result = self.request_validator.validate(fields)
+
+        if validation_result:
+            return validation_result
 
         catalog_base = CatalogBase.objects.filter(owner=user, catalog_name=catalog_name).first()
 
         if not catalog_base:
             return Response({'error': 'catalog base not found'}, status=status.HTTP_404_NOT_FOUND)
 
-        catalog_extension = catalog_base.catalog_extensions.first()
+        catalog_extension = catalog_base.catalog_extensions.filter(id=catalog_extension_id).first()
 
         if not catalog_extension:
-            return Response({'error': 'catalog extension of ' + catalog_name + ' not found'}, status=status.HTTP_404_NOT_FOUND)
+            return Response({'error': 'catalog extension not found'}, status=status.HTTP_404_NOT_FOUND)
 
         if edit_type == "add_inbound_s2ag_citations":
 
@@ -279,19 +352,27 @@ class CatalogExtensionView(APIView):
         
         user = request.user
         catalog_name = request.data.get('catalog_name', None)
+        catalog_extension_id = request.data.get('catalog_extension_id', None)
 
-        if catalog_name is None:
-            return Response({'error': 'catalog_name is required'}, status=status.HTTP_400_BAD_REQUEST)
+        fields = {
+            'catalog_name': catalog_name,
+            'catalog_extension_id': catalog_extension_id
+        }
+
+        validation_result = self.request_validator.validate(fields)
+
+        if validation_result:
+            return validation_result
 
         catalog_base = CatalogBase.objects.filter(owner=user, catalog_name=catalog_name).first()
 
         if not catalog_base:
             return Response({'error': 'catalog base not found'}, status=status.HTTP_404_NOT_FOUND)
 
-        catalog_extension = catalog_base.catalog_extensions.first()
+        catalog_extension = catalog_base.catalog_extensions.filter(id=catalog_extension_id).first()
 
         if not catalog_extension:
-            return Response({'error': 'catalog extension of ' + catalog_name + ' not found'}, status=status.HTTP_404_NOT_FOUND)
+            return Response({'error': 'catalog extension not found'}, status=status.HTTP_404_NOT_FOUND)
 
         catalog_extension.delete()
 
