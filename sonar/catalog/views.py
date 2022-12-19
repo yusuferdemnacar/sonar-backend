@@ -125,7 +125,7 @@ class CatalogExtensionView(APIView):
         if not catalog_base:
             return Response({'error': 'catalog base not found'}, status=status.HTTP_404_NOT_FOUND)
 
-        catalog_extension = catalog_base.catalog_extensions.get(id=catalog_extension_id)
+        catalog_extension = catalog_base.catalog_extensions.filter(id=catalog_extension_id).first()
         
         if not catalog_extension:
             return Response({'error': 'catalog extension of ' + catalog_name + ' not found'}, status=status.HTTP_404_NOT_FOUND)
@@ -169,7 +169,7 @@ class CatalogExtensionView(APIView):
         if not catalog_base:
             return Response({'error': 'catalog base not found'}, status=status.HTTP_404_NOT_FOUND)
 
-        catalog_extension = catalog_base.catalog_extensions.get(id=catalog_extension_id)
+        catalog_extension = catalog_base.catalog_extensions.filter(id=catalog_extension_id).first()
 
         if not catalog_extension:
             return Response({'error': 'catalog extension of ' + catalog_name + ' not found'}, status=status.HTTP_404_NOT_FOUND)
@@ -292,7 +292,7 @@ class CatalogExtensionView(APIView):
         if not catalog_base:
             return Response({'error': 'catalog base not found'}, status=status.HTTP_404_NOT_FOUND)
 
-        catalog_extension = catalog_base.catalog_extensions.get(id=catalog_extension_id)
+        catalog_extension = catalog_base.catalog_extensions.filter(id=catalog_extension_id).first()
 
         if not catalog_extension:
             return Response({'error': 'catalog extension of ' + catalog_name + ' not found'}, status=status.HTTP_404_NOT_FOUND)
