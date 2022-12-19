@@ -120,11 +120,12 @@ class CatalogExtensionView(APIView):
         user = request.user
         catalog_name = request.query_params.get('catalog_name', None)
         catalog_base = CatalogBase.objects.filter(owner=user, catalog_name=catalog_name).first()
+        catalog_extension_id = request.query_params.get('catalog_extension_id', None)
 
         if not catalog_base:
             return Response({'error': 'catalog base not found'}, status=status.HTTP_404_NOT_FOUND)
 
-        catalog_extension = catalog_base.catalog_extensions.first()
+        catalog_extension = catalog_base.catalog_extensions.get(id=catalog_extension_id)
         
         if not catalog_extension:
             return Response({'error': 'catalog extension of ' + catalog_name + ' not found'}, status=status.HTTP_404_NOT_FOUND)
@@ -141,12 +142,7 @@ class CatalogExtensionView(APIView):
         if not catalog_base:
             return Response({'error': 'catalog base not found'}, status=status.HTTP_404_NOT_FOUND)
 
-        catalog_extension = catalog_base.catalog_extensions.first()
-
-        catalog_extension, created = CatalogExtension.objects.get_or_create(catalog_base=catalog_base)
-
-        if not created:
-            return Response({'error': 'catalog extension already exists'}, status=status.HTTP_400_BAD_REQUEST)
+        catalog_extension = CatalogExtension.objects.create(catalog_base=catalog_base)
 
         catalog_extension.save()
 
@@ -156,10 +152,14 @@ class CatalogExtensionView(APIView):
         
         user = request.user
         catalog_name = request.data.get('catalog_name', None)
+        catalog_extension_id = request.data.get('catalog_extension_id', None)
         edit_type = request.data.get('edit_type', None)
 
         if catalog_name is None:
             return Response({'error': 'catalog_name is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if catalog_extension_id is None:
+            return Response({'error': 'catalog_extension_id is required'}, status=status.HTTP_400_BAD_REQUEST)
 
         if edit_type is None:
             return Response({'error': 'edit_type is required'}, status=status.HTTP_400_BAD_REQUEST)
@@ -169,7 +169,7 @@ class CatalogExtensionView(APIView):
         if not catalog_base:
             return Response({'error': 'catalog base not found'}, status=status.HTTP_404_NOT_FOUND)
 
-        catalog_extension = catalog_base.catalog_extensions.first()
+        catalog_extension = catalog_base.catalog_extensions.get(id=catalog_extension_id)
 
         if not catalog_extension:
             return Response({'error': 'catalog extension of ' + catalog_name + ' not found'}, status=status.HTTP_404_NOT_FOUND)
@@ -279,16 +279,20 @@ class CatalogExtensionView(APIView):
         
         user = request.user
         catalog_name = request.data.get('catalog_name', None)
+        catalog_extension_id = request.data.get('catalog_extension_id', None)
 
         if catalog_name is None:
             return Response({'error': 'catalog_name is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if catalog_extension_id is None:
+            return Response({'error': 'catalog_extension_id is required'}, status=status.HTTP_400_BAD_REQUEST)
 
         catalog_base = CatalogBase.objects.filter(owner=user, catalog_name=catalog_name).first()
 
         if not catalog_base:
             return Response({'error': 'catalog base not found'}, status=status.HTTP_404_NOT_FOUND)
 
-        catalog_extension = catalog_base.catalog_extensions.first()
+        catalog_extension = catalog_base.catalog_extensions.get(id=catalog_extension_id)
 
         if not catalog_extension:
             return Response({'error': 'catalog extension of ' + catalog_name + ' not found'}, status=status.HTTP_404_NOT_FOUND)
