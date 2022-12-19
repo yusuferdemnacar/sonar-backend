@@ -7,19 +7,19 @@ class CatalogBaseSerializer(serializers.Serializer):
 
     catalog_name = serializers.CharField(max_length=255)
     owner = UserSerializer(many=False)
-    articles = ArticleSerializer(many=True)
+    article_identifiers = ArticleIdentifierSerializer(many=True)
 
     class Meta:
         model = CatalogBase
         unique_together = ('owner', 'catalog_name')
-        fields = ('owner', 'catalog_name', 's2ag_paper_identifiers')
+        fields = ('owner', 'catalog_name', 'paper_identifiers')
 
 class CatalogExtensionSerializer(serializers.Serializer):
 
     catalog_base = CatalogBaseSerializer(many=False)
-    articles = ArticleSerializer(many=True)
+    article_identifiers = ArticleIdentifierSerializer(many=True)
 
     class Meta:
         model = CatalogExtension
-        unique_together = ('owner', 'catalog_base', 's2ag_paper_identifiers')
+        unique_together = ('owner', 'catalog_base', 'paper_identifiers')
         fields = ('catalog_base')

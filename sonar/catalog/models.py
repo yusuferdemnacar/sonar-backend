@@ -3,7 +3,7 @@ from django.contrib.auth.models import User
 from article.models import *
 
 class CatalogAbstract(models.Model):
-    articles = models.ManyToManyField(Article, related_name="s2ag_papers_%(class)s")
+    article_identifiers = models.ManyToManyField(ArticleIdentifier, related_name="papers_%(class)s")
 
     class Meta:
         abstract = True
