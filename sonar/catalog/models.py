@@ -1,9 +1,9 @@
 from django.db import models
 from django.contrib.auth.models import User
-from s2ag.models import *
+from article.models import *
 
 class CatalogAbstract(models.Model):
-    s2ag_paper_identifiers = models.ManyToManyField(S2AGArticleIdentifier, related_name="s2ag_papers_%(class)s")
+    articles = models.ManyToManyField(Article, related_name="s2ag_papers_%(class)s")
 
     class Meta:
         abstract = True
