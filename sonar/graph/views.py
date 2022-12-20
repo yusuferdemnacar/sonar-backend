@@ -6,7 +6,7 @@ from article.models import *
 from article.serializers import *
 from catalog.models import *
 import requests
-
+from neo4j_client import *
 class RequestValidator():
 
     def validate(self, required_fields):
@@ -74,7 +74,7 @@ class BuildGraphView(APIView):
 
         for article_doi in article_doi_set:
 
-            nodes.add(article_doi)
+
 
             s2ag_article_lookup = "https://api.semanticscholar.org/graph/v1/paper/" + article_doi + "?fields=externalIds,title,abstract,year,citationCount,referenceCount,fieldsOfStudy,publicationTypes,publicationDate,authors"
             s2ag_article_lookup_response = requests.get(s2ag_article_lookup)
@@ -93,6 +93,8 @@ class BuildGraphView(APIView):
                 authors=[author["name"] for author in s2ag_article_lookup_json.get('authors', None)] if s2ag_article_lookup_json.get('authors', None) is not None else None
             )
 
+            nodes.add(article)
+
             offset = 0
 
             next = True
@@ -102,6 +104,7 @@ class BuildGraphView(APIView):
                 s2ag_inbound_citations_lookup_url = "https://api.semanticscholar.org/graph/v1/paper/" + article_doi + "/references?fields=externalIds&limit=1000&offset=" + str(offset)
                 s2ag_inbound_citations_lookup_response = requests.get(s2ag_inbound_citations_lookup_url)
 
+                print(s2ag_inbound_citations_lookup_response.status_code)
                 if s2ag_inbound_citations_lookup_response.status_code == 200:
 
                     try_cnt = 0
@@ -139,3 +142,9 @@ class BuildGraphView(APIView):
                             offset += 1000
                         else:
                             next = False
+
+        neo4j_client = Neo4jClient()
+        neo4j_client.create_articles(nodes)
+        neo4j_client.create_relations(edges)
+
+        return Response(status=200)
