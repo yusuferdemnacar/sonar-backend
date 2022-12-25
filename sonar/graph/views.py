@@ -147,4 +147,4 @@ class BuildGraphView(APIView):
         neo4j_client.create_articles(nodes)
         neo4j_client.create_relations(edges)
 
-        return Response(status=200)
+        return Response({'success': 'graph built'}, status=status.HTTP_200_OK)
