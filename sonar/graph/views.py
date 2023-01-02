@@ -7,6 +7,9 @@ from article.serializers import *
 from catalog.models import *
 import requests
 from neo4j_client import *
+import concurrent.futures as cf
+from time import time
+import os
 class RequestValidator():
 
     def validate(self, required_fields):
@@ -19,23 +22,63 @@ class RequestValidator():
 
 class PaperRetriever():
 
-    def retrieve(self, doi):
+    def retrieve_paper(self, article_doi):
 
-        article = Article.objects.filter(DOI=doi).first()
+        nodes = set()
+        edges = set()
 
-        if article is None:
-            return Response({'error': 'article not found'}, status=status.HTTP_400_BAD_REQUEST)
+        s2ag_article_lookup = "https://api.semanticscholar.org/graph/v1/paper/" + article_doi + "?fields=externalIds,title,abstract,year,citationCount,referenceCount,fieldsOfStudy,publicationTypes,publicationDate,authors,references.externalIds"
+        s2ag_article_lookup_response = requests.get(s2ag_article_lookup, headers = {'x-api-key':os.environ.get('S2AG_API_KEY')})
+        s2ag_article_lookup_json = s2ag_article_lookup_response.json()
 
-        serializer = ArticleSerializer(article)
+        print(s2ag_article_lookup_response.status_code)
 
-        return Response(serializer.data)
+        while s2ag_article_lookup_response.status_code != 200:
+            print("Retrying for " + article_doi + " ...")
+            s2ag_article_lookup_response = requests.get(s2ag_article_lookup, headers = {'x-api-key':os.environ.get('S2AG_API_KEY')})
+            s2ag_article_lookup_json = s2ag_article_lookup_response.json()
+
+        article = Article(
+            DOI=article_doi,
+            title=s2ag_article_lookup_json.get('title', None),
+            abstract=s2ag_article_lookup_json.get('abstract', None),
+            year=s2ag_article_lookup_json.get('year', None),
+            citation_count=s2ag_article_lookup_json.get('citationCount', None),
+            reference_count=s2ag_article_lookup_json.get('referenceCount', None),
+            fields_of_study=s2ag_article_lookup_json.get('fieldsOfStudy', None),
+            publication_types=s2ag_article_lookup_json.get('publicationTypes', None),
+            publication_date=s2ag_article_lookup_json.get('publicationDate', None),
+            authors=[author["name"] for author in s2ag_article_lookup_json.get('authors', None)] if s2ag_article_lookup_json.get('authors', None) is not None else None
+        )
+
+        nodes.add(article)
+
+        references = s2ag_article_lookup_json.get('references', None)
+
+        for reference in references:
+
+            article_reference_externalIds = reference.get('externalIds', None)
+
+            if article_reference_externalIds is not None:
+
+                article_reference_doi = article_reference_externalIds.get('DOI', None)
+
+                if article_reference_doi is not None:
+
+                    edges.add((article_doi, article_reference_doi, "cites"))
+
+        return (nodes, edges)
 
 class BuildGraphView(APIView):
 
     permission_classes = (IsAuthenticated,)
     request_validator = RequestValidator()
+    paper_retriever = PaperRetriever()
+    neo4j_client = Neo4jClient()
     
     def post(self, request):
+
+        start = time()
         
         user = request.user
         catalog_name = request.data.get("catalog_name", None)
@@ -72,79 +115,32 @@ class BuildGraphView(APIView):
         nodes = set()
         edges = set()
 
-        for article_doi in article_doi_set:
+        with cf.ThreadPoolExecutor(max_workers=100) as executor:
+            
+            futures = [executor.submit(self.paper_retriever.retrieve_paper, article_doi) for article_doi in article_doi_set]
 
+            for future in cf.as_completed(futures):
+                result = future.result()
 
+                nodes = nodes.union(result[0])
+                edges = edges.union(result[1])
 
-            s2ag_article_lookup = "https://api.semanticscholar.org/graph/v1/paper/" + article_doi + "?fields=externalIds,title,abstract,year,citationCount,referenceCount,fieldsOfStudy,publicationTypes,publicationDate,authors"
-            s2ag_article_lookup_response = requests.get(s2ag_article_lookup)
-            s2ag_article_lookup_json = s2ag_article_lookup_response.json()
+        edges = list(edges)
+        edges = [edge for edge in edges if edge[1] in [node.DOI for node in nodes]]
 
-            article = Article(
-                DOI=article_doi,
-                title=s2ag_article_lookup_json.get('title', None),
-                abstract=s2ag_article_lookup_json.get('abstract', None),
-                year=s2ag_article_lookup_json.get('year', None),
-                citation_count=s2ag_article_lookup_json.get('citationCount', None),
-                reference_count=s2ag_article_lookup_json.get('referenceCount', None),
-                fields_of_study=s2ag_article_lookup_json.get('fieldsOfStudy', None),
-                publication_types=s2ag_article_lookup_json.get('publicationTypes', None),
-                publication_date=s2ag_article_lookup_json.get('publicationDate', None),
-                authors=[author["name"] for author in s2ag_article_lookup_json.get('authors', None)] if s2ag_article_lookup_json.get('authors', None) is not None else None
-            )
+        print(len(edges))
 
-            nodes.add(article)
+        data_retrieval_time = time() - start
 
-            offset = 0
+        print("Data retrieved in " + str(data_retrieval_time) + " seconds")
 
-            next = True
+        print("Building graph ...")
 
-            while next:
+        self.neo4j_client.create_articles_batch(nodes)
+        self.neo4j_client.create_edges_batch(edges, batch_size=500)
 
-                s2ag_inbound_citations_lookup_url = "https://api.semanticscholar.org/graph/v1/paper/" + article_doi + "/references?fields=externalIds&limit=1000&offset=" + str(offset)
-                s2ag_inbound_citations_lookup_response = requests.get(s2ag_inbound_citations_lookup_url)
+        graph_building_time = time() - start - data_retrieval_time
 
-                print(s2ag_inbound_citations_lookup_response.status_code)
-                if s2ag_inbound_citations_lookup_response.status_code == 200:
-
-                    try_cnt = 0
-
-                    s2ag_inbound_citations_lookup_json = s2ag_inbound_citations_lookup_response.json()
-
-                    s2ag_paper_citations = s2ag_inbound_citations_lookup_json.get('data', None)
-                    
-                    if s2ag_paper_citations is not None:
-
-                        for s2ag_paper_citation in s2ag_paper_citations:
-
-                            s2ag_citing_paper = s2ag_paper_citation.get('citedPaper', None)
-
-                            if s2ag_citing_paper is not None:
-
-                                s2ag_citing_paper_externalIds = s2ag_citing_paper.get('externalIds', None)
-
-                                if s2ag_citing_paper_externalIds is not None:
-                                
-                                    if "DOI" not in s2ag_citing_paper_externalIds.keys():
-                                        continue
-
-                                    s2ag_citing_paper_doi = s2ag_citing_paper_externalIds.get('DOI', None)
-
-                                    if s2ag_citing_paper_doi is not None:
-
-                                        if s2ag_citing_paper_doi in article_doi_set:
-
-                                            edges.add((article_doi, s2ag_citing_paper_doi, "cites"))
-
-                        is_there_next = s2ag_inbound_citations_lookup_json.get('next', None)
-
-                        if is_there_next is not None:
-                            offset += 1000
-                        else:
-                            next = False
-
-        neo4j_client = Neo4jClient()
-        neo4j_client.create_articles(nodes)
-        neo4j_client.create_relations(edges)
+        print("Graph built in " + str(graph_building_time) + " seconds")
 
         return Response({'success': 'graph built'}, status=status.HTTP_200_OK)

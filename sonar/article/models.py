@@ -29,5 +29,5 @@ class Article(models.Model):
         verbose_name_plural = "Articles"
 
     def __str__(self):
-        return "/".join(self.DOI, self.title)
+        return "/".join([self.DOI, self.title])
     
