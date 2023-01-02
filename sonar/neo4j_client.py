@@ -1,12 +1,40 @@
 from neo4j import GraphDatabase
+from article.serializers import ArticleSerializer
 
 class Neo4jClient:
 
     def __init__(self):
-        self.driver = GraphDatabase.driver(uri='bolt://localhost:7687', auth=('neo4j','a1b2c3d4'))
+        self.driver = GraphDatabase.driver(uri='neo4j+s://3a7e0e08.databases.neo4j.io', auth=('neo4j','4Lxnu_rI96rB5nqU9a4q6UNawRfo6RRwdrkW-HsozT0'))
 
     def close(self):
         self.driver.close()
+
+    def create_articles_batch(self, article_set):
+
+        article_list = []
+
+        for article in article_set:
+            
+            article_list.append(dict(ArticleSerializer(article).data))
+
+        with self.driver.session() as session:
+            session.execute_write(Neo4jClient._create_article_batch, article_list)
+
+    def create_edges_batch(self, citation_set, batch_size=500):
+
+        citation_list = []
+
+        for citation in citation_set:
+            citation_list.append({"citer": citation[0], "citee": citation[1], "type": "cites"})
+
+        batches = [citation_list[x:x+batch_size] for x in range(0, len(citation_list), batch_size)]
+
+        with self.driver.session() as session:
+            i = 0
+            for batch in batches:
+                i += 1
+                print("Batch " + str(i) + " of " + str(len(batches)))
+                session.execute_write(Neo4jClient._create_citation_batch, batch)
 
     def create_articles(self, article_list):
         with self.driver.session() as session:
@@ -34,9 +62,30 @@ class Neo4jClient:
                     tuple[1]
                 )
 
+    def _create_article_batch(tx, article_list):
 
+        tx.run("""
+            WITH $batch AS batch
+            UNWIND batch AS article
+            CREATE (p:Article)
+            SET p += article;
+        """, batch=article_list)
 
-    @staticmethod
+    def _create_citation_batch(tx, citation_list):
+
+            citation_entities = []
+
+            for citation in citation_list:
+                citation_entities.append({"citer": citation["citer"], "citee": citation["citee"], "type": "cites"})
+
+            tx.run("""
+                WITH $batch AS batch
+                UNWIND batch AS citation
+                MATCH (citer) WHERE citer.DOI = citation.citer
+                MATCH (citee) WHERE citee.DOI = citation.citee
+                CREATE (citer)-[:Cites]->(citee)
+            """, batch=citation_entities)
+
     def _create_article(tx,
                         DOI,
                         title,
