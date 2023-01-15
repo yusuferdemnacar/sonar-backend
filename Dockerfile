@@ -1,12 +1,25 @@
 FROM python:3.8
-WORKDIR /app
 
-ENV PYTHONDONTWRITEBYTECODE=1
-ENV PYTHONUNBUFFERED=1
+ENV DockerHOME=/home/app/webapp
 
-RUN apt-get update
-RUN apt-get install gcc libc-dev g++ libffi-dev libxml2 libffi-dev unixodbc-dev -y
+# set work directory
+RUN mkdir -p $DockerHOME
 
-COPY requirements.txt /app/
+# where your code lives
+WORKDIR $DockerHOME
+
+# set environment variables
+ENV PYTHONDONTWRITEBYTECODE 1
+ENV PYTHONUNBUFFERED 1
+
+# install dependencies
+RUN pip install --upgrade pip
+
+# copy whole project to your docker home directory.
+COPY sonar $DockerHOME
+# run this command to install all dependencies
 RUN pip install -r requirements.txt
-COPY . /app/
+# port where the Django app runs
+EXPOSE 8000
+# start server
+CMD python manage.py runserver
