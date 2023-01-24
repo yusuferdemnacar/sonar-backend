@@ -4,6 +4,8 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework import status
 from .serializers import *
 from .models import *
+from rest_framework.decorators import api_view, permission_classes, authentication_classes
+from rest_framework.permissions import IsAuthenticated, AllowAny
 import requests
 
 class RequestValidator():
@@ -46,6 +48,7 @@ class CatalogBaseView(APIView):
     def post(self, request):
         
         user = request.user
+        print(request.POST)
         catalog_name = request.POST.get('catalog_name', None)
 
         fields = {
@@ -391,3 +394,30 @@ class CatalogExtensionView(APIView):
         catalog_extension.delete()
 
         return Response({"info": "catalog extension deleted"}, status=status.HTTP_200_OK)
+
+@api_view(['GET',])
+@permission_classes([IsAuthenticated])
+def get_all_catalog_bases(request):
+    user = request.user
+    catalog_bases = CatalogBase.objects.filter(owner = user)
+
+    catalog_bases_serialized = CatalogBaseSerializer(catalog_bases, many=True)
+    return Response(catalog_bases_serialized.data, status=status.HTTP_200_OK)
+
+@api_view(['GET',])
+@permission_classes([IsAuthenticated])
+def get_catalog_extensions(request):
+    user = request.user
+    catalog_name = request.GET.get('catalog_name', None)
+    if not catalog_name:
+        return Response({'error': 'no catalog base given'}, status=status.HTTP_404_NOT_FOUND)
+
+    catalog_base = CatalogBase.objects.filter(owner=user, catalog_name=catalog_name).first()
+
+    if not catalog_base:
+        return Response({'error': 'catalog base not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    catalog_extensions = CatalogExtension.objects.filter(catalog_base=catalog_base)
+
+    catalog_extensions_serialized = CatalogExtensionSerializer(catalog_extensions, many=True)
+    return Response(catalog_extensions_serialized.data, status=status.HTTP_200_OK)
