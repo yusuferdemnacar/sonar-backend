@@ -6,7 +6,7 @@ from article.models import *
 from article.serializers import *
 from catalog.models import *
 import requests
-from neo4j_client import *
+from neo4j_graph_client import *
 import concurrent.futures as cf
 from time import time
 import os
@@ -74,7 +74,7 @@ class BuildGraphView(APIView):
     permission_classes = (IsAuthenticated,)
     request_validator = RequestValidator()
     paper_retriever = PaperRetriever()
-    neo4j_client = Neo4jClient()
+    neo4j_graph_client = Neo4jGraphClient()
     
     def post(self, request):
 
@@ -136,8 +136,8 @@ class BuildGraphView(APIView):
 
         print("Building graph ...")
 
-        self.neo4j_client.create_articles_batch(nodes)
-        self.neo4j_client.create_edges_batch(edges, batch_size=500)
+        self.neo4j_graph_client.create_articles_batch(nodes)
+        self.neo4j_graph_client.create_edges_batch(edges, batch_size=500)
 
         graph_building_time = time() - start - data_retrieval_time
 
