@@ -4,6 +4,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework import status
 from article.models import *
 from article.serializers import *
+from author.models import *
 from catalog.models import *
 import requests
 from .neo4j_graph_client import *
@@ -24,16 +25,23 @@ class PaperRetriever():
 
     def retrieve_paper(self, article_doi):
 
-        nodes = set()
-        edges = set()
+        article_nodes = set()
+        citation_edges = set()
 
-        s2ag_article_lookup = "https://api.semanticscholar.org/graph/v1/paper/" + article_doi + "?fields=externalIds,title,abstract,year,citationCount,referenceCount,fieldsOfStudy,publicationTypes,publicationDate,authors,references.externalIds"
+        author_nodes = set()
+        authorship_edges = set()
+
+        s2ag_article_lookup = "https://api.semanticscholar.org/graph/v1/paper/" + article_doi + "?fields=externalIds,title,abstract,year,citationCount,referenceCount,fieldsOfStudy,publicationTypes,publicationDate,authors.name,authors.paperCount,authors.citationCount,authors.hIndex,authors.affiliations,references.externalIds"
         s2ag_article_lookup_response = requests.get(s2ag_article_lookup, headers = {'x-api-key':os.environ.get('S2AG_API_KEY')})
         s2ag_article_lookup_json = s2ag_article_lookup_response.json()
 
         print(s2ag_article_lookup_response.status_code)
 
-        while s2ag_article_lookup_response.status_code != 200:
+        if s2ag_article_lookup_response.status_code == status.HTTP_404_NOT_FOUND:
+            return None
+
+        while s2ag_article_lookup_response.status_code == status.HTTP_429_TOO_MANY_REQUESTS:
+            print(s2ag_article_lookup_response.status_code)
             print("Retrying for " + article_doi + " ...")
             s2ag_article_lookup_response = requests.get(s2ag_article_lookup, headers = {'x-api-key':os.environ.get('S2AG_API_KEY')})
             s2ag_article_lookup_json = s2ag_article_lookup_response.json()
@@ -51,7 +59,33 @@ class PaperRetriever():
             authors=[author["name"] for author in s2ag_article_lookup_json.get('authors', None)] if s2ag_article_lookup_json.get('authors', None) is not None else None
         )
 
-        nodes.add(article)
+        authors = s2ag_article_lookup_json.get('authors', None)
+
+        if authors is not None:
+                
+            for author in authors:
+
+                author_name = author.get('name', None)
+
+                if author_name is not None:
+
+                    author_paper_count = author.get('paperCount', None)
+                    author_citation_count = author.get('citationCount', None)
+                    author_h_index = author.get('hIndex', None)
+                    author_affiliations = author.get('affiliations', None)
+
+                    author = Author(
+                        name=author_name,
+                        paper_count=author_paper_count,
+                        citation_count=author_citation_count,
+                        h_index=author_h_index,
+                        affiliations=author_affiliations
+                    )
+
+                    author_nodes.add(author)
+                    authorship_edges.add((author_name, article_doi, "authored"))
+
+        article_nodes.add(article)
 
         references = s2ag_article_lookup_json.get('references', None)
 
@@ -65,9 +99,9 @@ class PaperRetriever():
 
                 if article_reference_doi is not None:
 
-                    edges.add((article_doi, article_reference_doi, "cites"))
+                    citation_edges.add((article_doi, article_reference_doi, "cites"))
 
-        return (nodes, edges)
+        return {"article_nodes": article_nodes, "citation_edges": citation_edges, "author_nodes": author_nodes, "authorship_edges": authorship_edges}
 
 class BuildGraphView(APIView):
 
@@ -112,8 +146,11 @@ class BuildGraphView(APIView):
         for article in catalog_extention.article_identifiers.all():
             article_doi_set.add(article.DOI)
 
-        nodes = set()
-        edges = set()
+        article_nodes = set()
+        citation_edges = set()
+
+        author_nodes = set()
+        authorship_edges = set()
 
         with cf.ThreadPoolExecutor(max_workers=100) as executor:
             
@@ -122,13 +159,20 @@ class BuildGraphView(APIView):
             for future in cf.as_completed(futures):
                 result = future.result()
 
-                nodes = nodes.union(result[0])
-                edges = edges.union(result[1])
+                if result is not None:
 
-        edges = list(edges)
-        edges = [edge for edge in edges if edge[1] in [node.DOI for node in nodes]]
+                    article_nodes = article_nodes.union(result["article_nodes"])
+                    citation_edges = citation_edges.union(result["citation_edges"])
+                    author_nodes = author_nodes.union(result["author_nodes"])
+                    authorship_edges = authorship_edges.union(result["authorship_edges"])
 
-        print(len(edges))
+        citation_edges = list(citation_edges)
+        citation_edges = [edge for edge in citation_edges if edge[1] in [node.DOI for node in article_nodes]]
+
+        print("article_nodes: " + str(len(article_nodes)))
+        print("citation_edges: " + str(len(citation_edges)))
+        print("author_nodes: " + str(len(author_nodes)))
+        print("authorship_edges: " + str(len(authorship_edges)))
 
         data_retrieval_time = time() - start
 
@@ -136,8 +180,10 @@ class BuildGraphView(APIView):
 
         print("Building graph ...")
 
-        self.neo4j_graph_client.create_articles_batch(nodes)
-        self.neo4j_graph_client.create_edges_batch(edges, batch_size=500)
+        self.neo4j_client.create_article_nodes_batch(article_nodes)
+        self.neo4j_client.create_citation_edges_batch(citation_edges, batch_size=500)
+        self.neo4j_client.create_author_nodes_batch(author_nodes)
+        self.neo4j_client.create_authorship_edges_batch(authorship_edges, batch_size=500)
 
         graph_building_time = time() - start - data_retrieval_time
 
