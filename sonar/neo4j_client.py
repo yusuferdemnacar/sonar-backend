@@ -1,9 +1,11 @@
 from neo4j import GraphDatabase
+from os import environ
 
 class Neo4jClient:
 
     def __init__(self):
-        self.driver = GraphDatabase.driver(uri='neo4j+s://3a7e0e08.databases.neo4j.io', auth=('neo4j','4Lxnu_rI96rB5nqU9a4q6UNawRfo6RRwdrkW-HsozT0'))
+        print(environ.get('NEO4J_HOST'))
+        self.driver = GraphDatabase.driver(uri=environ.get('NEO4J_HOST'), auth=(environ.get('NEO4J_USER'),environ.get('NEO4J_PASSWORD')))
 
     def close(self):
         self.driver.close()

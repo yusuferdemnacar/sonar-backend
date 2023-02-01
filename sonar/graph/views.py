@@ -6,7 +6,7 @@ from article.models import *
 from article.serializers import *
 from catalog.models import *
 import requests
-from neo4j_graph_client import *
+from .neo4j_graph_client import *
 import concurrent.futures as cf
 from time import time
 import os
