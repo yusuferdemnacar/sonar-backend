@@ -180,10 +180,10 @@ class BuildGraphView(APIView):
 
         print("Building graph ...")
 
-        self.neo4j_client.create_article_nodes_batch(article_nodes)
-        self.neo4j_client.create_citation_edges_batch(citation_edges, batch_size=500)
-        self.neo4j_client.create_author_nodes_batch(author_nodes)
-        self.neo4j_client.create_authorship_edges_batch(authorship_edges, batch_size=500)
+        self.neo4j_graph_client.create_article_nodes_batch(article_nodes)
+        self.neo4j_graph_client.create_citation_edges_batch(citation_edges, batch_size=500)
+        self.neo4j_graph_client.create_author_nodes_batch(author_nodes)
+        self.neo4j_graph_client.create_authorship_edges_batch(authorship_edges, batch_size=500)
 
         graph_building_time = time() - start - data_retrieval_time
 
