@@ -45,6 +45,7 @@ INSTALLED_APPS = [
     'authmngr',
     'article',
     'graph',
+    'author',
     'rest_framework',
     'rest_framework.authtoken',
     'corsheaders',
