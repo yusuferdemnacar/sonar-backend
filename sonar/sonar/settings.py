@@ -46,6 +46,7 @@ INSTALLED_APPS = [
     'article',
     'graph',
     'author',
+    'analyze',
     'rest_framework',
     'rest_framework.authtoken',
     'corsheaders',
