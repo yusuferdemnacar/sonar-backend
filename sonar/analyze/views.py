@@ -43,9 +43,3 @@ class AnalysisView(APIView):
             return Response(self.neo4j_analysis_client.calculate_betweenness(user.username, node_type, edge_type))
         else:
             return Response({'error': 'invalid measure type'}, status=status.HTTP_400_BAD_REQUEST)
-
-
-
-
-
-# Create your views here.
