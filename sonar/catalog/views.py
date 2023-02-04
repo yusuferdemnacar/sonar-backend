@@ -118,7 +118,6 @@ class CatalogBaseView(APIView):
             
             if article in catalog_base.article_identifiers.all():
                 return Response({'error': 'paper_doi: ' + paper_doi + ' already in catalog base: ' + catalog_name}, status=status.HTTP_400_BAD_REQUEST)
-            print(year)
             article.title=title
             article.abstract=abstract
             article.year=year
