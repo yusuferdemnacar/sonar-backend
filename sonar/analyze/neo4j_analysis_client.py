@@ -18,7 +18,6 @@ class Neo4jAnalysisClient(Neo4jClient):
             tx.run(remove_graph_query)
 
         named_graph_query = """CALL gds.graph.project.cypher('{username}', 'MATCH (n:{node_type}) WHERE n.owner = "{username}" RETURN id(n) AS id', 'MATCH (n:{node_type}) WHERE n.owner = "{username}" MATCH (n)-[r:{edge_type}]->(m) RETURN id(n) AS source, id(m) AS target, type(r) AS type')""".format(username=username, node_type=node_type, edge_type=edge_type)
-        print(named_graph_query)
 
         betweenness_query = """CALL gds.betweenness.stream('{username}') YIELD nodeId, score RETURN gds.util.asNode(nodeId) AS Article, score AS betweenness_centrality_score ORDER BY score DESC""".format(username=username)
 

@@ -58,7 +58,6 @@ class Neo4jGraphClient(Neo4jClient):
             i = 0
             for batch in batches:
                 i += 1
-                print("Citation batch " + str(i) + " of " + str(len(batches)))
                 session.execute_write(Neo4jGraphClient._create_citation_edges_batch, batch, username)
 
     def _create_citation_edges_batch(tx, citation_list, username):
@@ -90,7 +89,6 @@ class Neo4jGraphClient(Neo4jClient):
             i = 0
             for batch in batches:
                 i += 1
-                print("Authorship batch " + str(i) + " of " + str(len(batches)))
                 session.execute_write(Neo4jGraphClient._create_authorship_edges_batch, batch, username)
 
     def _create_authorship_edges_batch(tx, authorship_list, username):

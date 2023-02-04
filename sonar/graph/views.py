@@ -35,13 +35,10 @@ class PaperRetriever():
         s2ag_article_lookup_response = requests.get(s2ag_article_lookup, headers = {'x-api-key':os.environ.get('S2AG_API_KEY')})
         s2ag_article_lookup_json = s2ag_article_lookup_response.json()
 
-        print(s2ag_article_lookup_response.status_code)
-
         if s2ag_article_lookup_response.status_code == status.HTTP_404_NOT_FOUND:
             return None
 
         while s2ag_article_lookup_response.status_code == status.HTTP_429_TOO_MANY_REQUESTS:
-            print(s2ag_article_lookup_response.status_code)
             print("Retrying for " + article_doi + " ...")
             s2ag_article_lookup_response = requests.get(s2ag_article_lookup, headers = {'x-api-key':os.environ.get('S2AG_API_KEY')})
             s2ag_article_lookup_json = s2ag_article_lookup_response.json()
