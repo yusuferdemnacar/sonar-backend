@@ -114,20 +114,21 @@ class CatalogBaseView(APIView):
             if validation_result:
                 return validation_result
 
-            article, _ = Article.objects.get_or_create(
-            DOI=paper_doi,
-            title=title,
-            abstract=abstract,
-            year=year,
-            citation_count=citation_count,
-            reference_count=reference_count,
-            fields_of_study=fields_of_study,
-            publication_types=publication_types,
-            publication_date=publication_date,
-            authors=authors)
+            article, _ = Article.objects.get_or_create(DOI=paper_doi)
             
             if article in catalog_base.article_identifiers.all():
                 return Response({'error': 'paper_doi: ' + paper_doi + ' already in catalog base: ' + catalog_name}, status=status.HTTP_400_BAD_REQUEST)
+            print(year)
+            article.title=title
+            article.abstract=abstract
+            article.year=year
+            article.citation_count=citation_count
+            article.reference_count=reference_count
+            article.fields_of_study=fields_of_study
+            article.publication_types=publication_types
+            article.publication_date=publication_date
+            article.authors=authors
+            article.save()
 
             catalog_base.article_identifiers.add(article)
 
