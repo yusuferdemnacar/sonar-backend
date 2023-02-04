@@ -7,7 +7,7 @@ class CatalogBaseSerializer(serializers.Serializer):
 
     catalog_name = serializers.CharField(max_length=255)
     owner = UserSerializer(many=False)
-    article_identifiers = ArticleIdentifierSerializer(many=True)
+    article_identifiers = ArticleSerializer(many=True)
 
     class Meta:
         model = CatalogBase
@@ -17,7 +17,7 @@ class CatalogBaseSerializer(serializers.Serializer):
 class CatalogExtensionSerializer(serializers.Serializer):
 
     catalog_base = CatalogBaseSerializer(many=False)
-    article_identifiers = ArticleIdentifierSerializer(many=True)
+    article_identifiers = ArticleSerializer(many=True)
 
     class Meta:
         model = CatalogExtension
