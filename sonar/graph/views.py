@@ -35,13 +35,10 @@ class PaperRetriever():
         s2ag_article_lookup_response = requests.get(s2ag_article_lookup, headers = {'x-api-key':os.environ.get('S2AG_API_KEY')})
         s2ag_article_lookup_json = s2ag_article_lookup_response.json()
 
-        print(s2ag_article_lookup_response.status_code)
-
         if s2ag_article_lookup_response.status_code == status.HTTP_404_NOT_FOUND:
             return None
 
         while s2ag_article_lookup_response.status_code == status.HTTP_429_TOO_MANY_REQUESTS:
-            print(s2ag_article_lookup_response.status_code)
             print("Retrying for " + article_doi + " ...")
             s2ag_article_lookup_response = requests.get(s2ag_article_lookup, headers = {'x-api-key':os.environ.get('S2AG_API_KEY')})
             s2ag_article_lookup_json = s2ag_article_lookup_response.json()
@@ -180,11 +177,11 @@ class BuildGraphView(APIView):
 
         print("Building graph ...")
 
-        self.neo4j_graph_client.create_article_nodes_batch(article_nodes)
-        self.neo4j_graph_client.create_citation_edges_batch(citation_edges, batch_size=500)
-        self.neo4j_graph_client.create_author_nodes_batch(author_nodes)
-        self.neo4j_graph_client.create_authorship_edges_batch(authorship_edges, batch_size=500)
-        self.neo4j_graph_client.create_coauthorship_edges()
+        self.neo4j_graph_client.create_article_nodes_batch(article_set=article_nodes, username=user.username)
+        self.neo4j_graph_client.create_citation_edges_batch(citation_set=citation_edges, batch_size=500, username=user.username)
+        self.neo4j_graph_client.create_author_nodes_batch(author_set=author_nodes, username=user.username)
+        self.neo4j_graph_client.create_authorship_edges_batch(authorship_set=authorship_edges, batch_size=500, username=user.username)
+        self.neo4j_graph_client.create_coauthorship_edges(username=user.username)
 
         graph_building_time = time() - start - data_retrieval_time
 
