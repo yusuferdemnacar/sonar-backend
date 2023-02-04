@@ -4,7 +4,7 @@ from author.serializers import AuthorSerializer
 
 class Neo4jGraphClient(Neo4jClient):
 
-    def create_article_nodes_batch(self, article_set):
+    def create_article_nodes_batch(self, article_set, username):
 
         article_list = []
 
@@ -13,18 +13,19 @@ class Neo4jGraphClient(Neo4jClient):
             article_list.append(dict(ArticleSerializer(article).data))
 
         with self.driver.session() as session:
-            session.execute_write(Neo4jGraphClient._create_article_nodes_batch, article_list)
+            session.execute_write(Neo4jGraphClient._create_article_nodes_batch, article_list, username)
 
-    def _create_article_nodes_batch(tx, article_list):
+    def _create_article_nodes_batch(tx, article_list, username):
 
         tx.run("""
             WITH $batch AS batch
             UNWIND batch AS article
             CREATE (p:Article)
+            SET p.owner = $username
             SET p += article;
-        """, batch=article_list)
+        """, batch=article_list, username=username)
 
-    def create_author_nodes_batch(self, author_set):
+    def create_author_nodes_batch(self, author_set, username):
 
         author_list = []
 
@@ -32,18 +33,19 @@ class Neo4jGraphClient(Neo4jClient):
             author_list.append(dict(AuthorSerializer(author).data))
 
         with self.driver.session() as session:
-            session.execute_write(Neo4jGraphClient._create_author_nodes_batch, author_list)
+            session.execute_write(Neo4jGraphClient._create_author_nodes_batch, author_list, username)
 
-    def _create_author_nodes_batch(tx, author_list):
+    def _create_author_nodes_batch(tx, author_list, username):
 
         tx.run("""
             WITH $batch AS batch
             UNWIND batch AS author
             CREATE (p:Author)
+            SET p.owner = $username
             SET p += author;
-        """, batch=author_list)
+        """, batch=author_list, username=username)
 
-    def create_citation_edges_batch(self, citation_set, batch_size=500):
+    def create_citation_edges_batch(self, citation_set, batch_size, username):
 
         citation_list = []
 
@@ -57,9 +59,9 @@ class Neo4jGraphClient(Neo4jClient):
             for batch in batches:
                 i += 1
                 print("Citation batch " + str(i) + " of " + str(len(batches)))
-                session.execute_write(Neo4jGraphClient._create_citation_edges_batch, batch)
+                session.execute_write(Neo4jGraphClient._create_citation_edges_batch, batch, username)
 
-    def _create_citation_edges_batch(tx, citation_list):
+    def _create_citation_edges_batch(tx, citation_list, username):
 
         citation_entities = []
 
@@ -69,12 +71,13 @@ class Neo4jGraphClient(Neo4jClient):
         tx.run("""
             WITH $batch AS batch
             UNWIND batch AS citation
-            MATCH (citer) WHERE citer.DOI = citation.citer
-            MATCH (citee) WHERE citee.DOI = citation.citee
-            CREATE (citer)-[:Cites]->(citee)
-        """, batch=citation_entities)
+            MATCH (citer) WHERE citer.DOI = citation.citer AND citer.owner = $username
+            MATCH (citee) WHERE citee.DOI = citation.citee AND citee.owner = $username
+            CREATE (citer)-[c:Cites]->(citee)
+            SET c.owner = $username
+        """, batch=citation_entities, username=username)
 
-    def create_authorship_edges_batch(self, authorship_set, batch_size=500):
+    def create_authorship_edges_batch(self, authorship_set, batch_size, username):
 
         authorship_list = []
 
@@ -88,9 +91,9 @@ class Neo4jGraphClient(Neo4jClient):
             for batch in batches:
                 i += 1
                 print("Authorship batch " + str(i) + " of " + str(len(batches)))
-                session.execute_write(Neo4jGraphClient._create_authorship_edges_batch, batch)
+                session.execute_write(Neo4jGraphClient._create_authorship_edges_batch, batch, username)
 
-    def _create_authorship_edges_batch(tx, authorship_list):
+    def _create_authorship_edges_batch(tx, authorship_list, username):
 
         authorship_entities = []
 
@@ -100,26 +103,28 @@ class Neo4jGraphClient(Neo4jClient):
         tx.run("""
             WITH $batch AS batch
             UNWIND batch AS authorship
-            MATCH (author) WHERE author.name = authorship.author
-            MATCH (article) WHERE article.DOI = authorship.article
-            CREATE (author)-[:Author_of]->(article)
-        """, batch=authorship_entities)
+            MATCH (author) WHERE author.name = authorship.author AND author.owner = $username
+            MATCH (article) WHERE article.DOI = authorship.article AND article.owner = $username
+            CREATE (author)-[a:Author_of]->(article)
+            SET a.owner = $username
+        """, batch=authorship_entities, username=username)
 
-    def create_coauthorship_edges(self):
+    def create_coauthorship_edges(self, username):
             
         with self.driver.session() as session:
-            session.execute_write(Neo4jGraphClient._create_coauthorship_edges)
+            session.execute_write(Neo4jGraphClient._create_coauthorship_edges, username=username)
 
-    def _create_coauthorship_edges(tx):
+    def _create_coauthorship_edges(tx, username):
 
         tx.run("""
                 call{
-                    match (a1:Author)-->(:Article)<--(a2:Author)
-                    where a1.name < a2.name and a1 <> a2 
+                    match (a1:Author)-->(k:Article)<--(a2:Author)
+                    where a1.name < a2.name and a1 <> a2 and a1.owner = $username and a2.owner = $username and k.owner = $username
                     return a1 as a1, a2 as a2, [(a1)-->(p:Article)<--(a2)|p.DOI] as L
                 }
                 merge (a1)-[c:Coauthorship]->(a2)
                 set c.weight = size(L)
                 set c.coauthored_paper_DOIS = L
-            """)
+                set c.owner = $username
+            """, username=username)
     
