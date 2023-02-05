@@ -40,7 +40,10 @@ class AnalysisView(APIView):
             return validation_result
         
         measure_types = {"betweenness": self.neo4j_analysis_client.calculate_betweenness,
-                         "eigenvector": self.neo4j_analysis_client.calculate_eigenvector}
+                         "eigenvector": self.neo4j_analysis_client.calculate_eigenvector,
+                         "closeness": self.neo4j_analysis_client.calculate_closeness_centrality,
+                         "degree": self.neo4j_analysis_client.calculate_degree_centrality,
+                         "pagerank": self.neo4j_analysis_client.calculate_pagerank,}
         
         if measure_type in measure_types.keys():
             return Response(measure_types[measure_type](user.username, node_type, edge_type))

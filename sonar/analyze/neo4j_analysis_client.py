@@ -42,3 +42,42 @@ class Neo4jAnalysisClient(Neo4jClient):
         eigenvector_query = """CALL gds.eigenvector.stream('{username}') YIELD nodeId, score RETURN gds.util.asNode(nodeId) AS {node_type}, score AS eigenvector_centrality_score ORDER BY score DESC""".format(username=username, node_type=node_type)
 
         return tx.run(eigenvector_query).data()
+    
+    def calculate_pagerank(self, username, node_type, edge_type):
+
+        with self.driver.session() as session:
+            session.run(Neo4jAnalysisClient._remove_named_graph, username)
+            session.run(Neo4jAnalysisClient._create_named_graph, username, node_type, edge_type)
+            return session.run(Neo4jAnalysisClient._calculate_pagerank, username, node_type, edge_type)
+        
+    def _calculate_pagerank(tx, username, node_type):
+
+        pagerank_query = """CALL gds.pageRank.stream('{username}') YIELD nodeId, score RETURN gds.util.asNode(nodeId) AS {node_type}, score AS pagerank_score ORDER BY score DESC""".format(username=username, node_type=node_type)
+
+        return tx.run(pagerank_query).data()
+    
+    def calculate_degree_centrality(self, username, node_type, edge_type):
+            
+            with self.driver.session() as session:
+                session.run(Neo4jAnalysisClient._remove_named_graph, username)
+                session.run(Neo4jAnalysisClient._create_named_graph, username, node_type, edge_type)
+                return session.run(Neo4jAnalysisClient._calculate_degree, username, node_type, edge_type)
+            
+    def _calculate_degree_centrality(tx, username, node_type):
+
+        degree_query = """CALL gds.degree.stream('{username}') YIELD nodeId, score RETURN gds.util.asNode(nodeId) AS {node_type}, score AS degree_centrality_score ORDER BY score DESC""".format(username=username, node_type=node_type)
+
+        return tx.run(degree_query).data()
+    
+    def calculate_closeness_centrality(self, username, node_type, edge_type):
+
+        with self.driver.session() as session:
+            session.run(Neo4jAnalysisClient._remove_named_graph, username)
+            session.run(Neo4jAnalysisClient._create_named_graph, username, node_type, edge_type)
+            return session.run(Neo4jAnalysisClient._calculate_closeness, username, node_type, edge_type)
+        
+    def _calculate_closeness_centrality(tx, username, node_type):
+
+        closeness_query = """CALL gds.closeness.stream('{username}') YIELD nodeId, centrality RETURN gds.util.asNode(nodeId) AS {node_type}, centrality AS closeness_centrality_score ORDER BY centrality DESC""".format(username=username, node_type=node_type)
+
+        return tx.run(closeness_query).data()
