@@ -5,6 +5,7 @@ from rest_framework.authtoken.models import Token
 from rest_framework.permissions import IsAuthenticated
 from django.contrib.auth import authenticate, login, logout
 from .serializers import *
+from graph.neo4j_graph_client import Neo4jGraphClient
 
 class RegisterView(APIView):
 
@@ -55,6 +56,8 @@ class LogoutView(APIView):
     def get(self, request):
 
         request.user.auth_token.delete()
+        neo4j_graph_client = Neo4jGraphClient()
+        neo4j_graph_client.delete_user_graph(username=request.user.username)
         logout(request)
         return Response(status=status.HTTP_200_OK)
         

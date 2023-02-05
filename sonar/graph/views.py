@@ -149,6 +149,8 @@ class BuildGraphView(APIView):
         author_nodes = set()
         authorship_edges = set()
 
+        print("Retrieving Data ...")
+
         with cf.ThreadPoolExecutor(max_workers=100) as executor:
             
             futures = [executor.submit(self.paper_retriever.retrieve_paper, article_doi) for article_doi in article_doi_set]
@@ -176,6 +178,8 @@ class BuildGraphView(APIView):
         print("Data retrieved in " + str(data_retrieval_time) + " seconds")
 
         print("Building graph ...")
+
+        self.neo4j_graph_client.delete_user_graph(username=user.username)
 
         self.neo4j_graph_client.create_article_nodes_batch(article_set=article_nodes, username=user.username)
         self.neo4j_graph_client.create_citation_edges_batch(citation_set=citation_edges, batch_size=500, username=user.username)

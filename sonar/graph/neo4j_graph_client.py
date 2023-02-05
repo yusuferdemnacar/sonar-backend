@@ -126,3 +126,15 @@ class Neo4jGraphClient(Neo4jClient):
                 set c.owner = $username
             """, username=username)
     
+    def delete_user_graph(self, username):
+
+        with self.driver.session() as session:
+            session.execute_write(Neo4jGraphClient._delete_user_graph, username=username)
+
+    def _delete_user_graph(tx, username):
+            
+            tx.run("""
+                MATCH (n)
+                WHERE n.owner = $username
+                DETACH DELETE n
+            """, username=username)
