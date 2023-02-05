@@ -39,7 +39,10 @@ class AnalysisView(APIView):
         if validation_result:
             return validation_result
         
-        if measure_type == 'betweenness':
-            return Response(self.neo4j_analysis_client.calculate_betweenness(user.username, node_type, edge_type))
+        measure_types = {"betweenness": self.neo4j_analysis_client.calculate_betweenness,
+                         "eigenvector": self.neo4j_analysis_client.calculate_eigenvector}
+        
+        if measure_type in measure_types.keys():
+            return Response(measure_types[measure_type](user.username, node_type, edge_type))
         else:
             return Response({'error': 'invalid measure type'}, status=status.HTTP_400_BAD_REQUEST)
