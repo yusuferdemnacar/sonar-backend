@@ -63,6 +63,19 @@ class Neo4jAnalysisClient(Neo4jClient):
                 session.run(Neo4jAnalysisClient._create_named_graph, username, node_type, edge_type)
                 return session.run(Neo4jAnalysisClient._calculate_degree, username, node_type, edge_type)
             
+    def calculate_article_rank(self, username, node_type, edge_type):
+
+        with self.driver.session() as session:
+            session.run(Neo4jAnalysisClient._remove_named_graph, username)
+            session.run(Neo4jAnalysisClient._create_named_graph, username, node_type, edge_type)
+            return session.run(Neo4jAnalysisClient._calculate_article_rank, username, node_type, edge_type)
+        
+    def _calculate_article_rank(tx, username, node_type):
+
+        article_rank_query = """CALL gds.articleRank.stream('{username}') YIELD nodeId, score RETURN gds.util.asNode(nodeId) AS {node_type}, score AS article_rank_score ORDER BY score DESC""".format(username=username, node_type=node_type)
+
+        return tx.run(article_rank_query).data()
+            
     def _calculate_degree_centrality(tx, username, node_type):
 
         degree_query = """CALL gds.degree.stream('{username}') YIELD nodeId, score RETURN gds.util.asNode(nodeId) AS {node_type}, score AS degree_centrality_score ORDER BY score DESC""".format(username=username, node_type=node_type)
