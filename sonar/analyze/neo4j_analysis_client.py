@@ -46,13 +46,13 @@ class Neo4jAnalysisClient(Neo4jClient):
 
         return tx.run(eigenvector_query).data()
     
-    def calculate_pagerank(self, username, node_type, edge_type):
+    def calculate_page_rank(self, username, node_type, edge_type):
 
         with self.driver.session() as session:
             Neo4jAnalysisClient._named_graph_op(session, username, node_type, edge_type)
-            return session.execute_read(Neo4jAnalysisClient._calculate_pagerank, username, node_type)
+            return session.execute_read(Neo4jAnalysisClient._calculate_page_rank, username, node_type)
         
-    def _calculate_pagerank(tx, username, node_type):
+    def _calculate_page_rank(tx, username, node_type):
 
         pagerank_query = """CALL gds.pageRank.stream('{username}') YIELD nodeId, score RETURN gds.util.asNode(nodeId) AS {node_type}, score AS pagerank_score ORDER BY score DESC""".format(username=username, node_type=node_type)
 

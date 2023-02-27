@@ -7,4 +7,5 @@ urlpatterns = [
     path("centrality/eigenvector/", EigenvectorCentralityView.as_view(), name="eigenvector_centrality"),
     path("centrality/degree/", DegreeCentralityView.as_view(), name="degree_centrality"),
     path("centrality/pagerank/", PageRankView.as_view(), name="pagerank"),
+    path("centrality/articlerank/", ArticleRankView.as_view(), name="articlerank"),
 ]

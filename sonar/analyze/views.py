@@ -219,6 +219,47 @@ class PageRankView(APIView):
         if (node_type, edge_type) not in homogenous_node_edge_pairs:
             return Response({'error': 'invalid node type and edge type combination'}, status=status.HTTP_400_BAD_REQUEST)
 
-        page_rank = self.neo4j_analysis_client.calculate_pagerank(user.username, node_type, edge_type)
+        page_rank = self.neo4j_analysis_client.calculate_page_rank(user.username, node_type, edge_type)
 
         return Response(page_rank, status=status.HTTP_200_OK)
+    
+class ArticleRankView(APIView):
+
+    permission_classes = (IsAuthenticated,)
+    neo4j_analysis_client = Neo4jAnalysisClient()
+    request_validator = RequestValidator()
+
+    def get(self, request):
+
+        user = request.user
+        
+        node_type = request.query_params.get('node_type')
+        edge_type = request.query_params.get('edge_type')
+
+        fields = {
+            'node_type': node_type,
+            'edge_type': edge_type
+        }
+
+        validation_result = self.request_validator.validate(fields)
+
+        if validation_result:
+            return validation_result
+        
+        homogenous_node_edge_pairs = [
+            ("Author", "Coauthorship"),
+            ("Article", "Cites")
+        ]
+
+        if node_type not in [pair[0] for pair in homogenous_node_edge_pairs]:
+            return Response({'error': 'invalid node type'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        if edge_type not in [pair[1] for pair in homogenous_node_edge_pairs]:
+            return Response({'error': 'invalid edge type'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        if (node_type, edge_type) not in homogenous_node_edge_pairs:
+            return Response({'error': 'invalid node type and edge type combination'}, status=status.HTTP_400_BAD_REQUEST)
+
+        article_rank = self.neo4j_analysis_client.calculate_article_rank(user.username, node_type, edge_type)
+
+        return Response(article_rank, status=status.HTTP_200_OK)
