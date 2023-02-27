@@ -8,4 +8,5 @@ urlpatterns = [
     path("centrality/degree/", DegreeCentralityView.as_view(), name="degree_centrality"),
     path("centrality/pagerank/", PageRankView.as_view(), name="pagerank"),
     path("centrality/articlerank/", ArticleRankView.as_view(), name="articlerank"),
+    path("centrality/harmonic/", HarmonicCentralityView.as_view(), name="harmonic_centrality"),
 ]

@@ -93,3 +93,15 @@ class Neo4jAnalysisClient(Neo4jClient):
         closeness_query = """CALL gds.beta.closeness.stream('{username}') YIELD nodeId, score RETURN gds.util.asNode(nodeId) AS {node_type}, score AS closeness_centrality_score ORDER BY score DESC""".format(username=username, node_type=node_type)
 
         return tx.run(closeness_query).data()
+    
+    def calculate_harmonic_centrality(self, username, node_type, edge_type):
+
+        with self.driver.session() as session:
+            Neo4jAnalysisClient._named_graph_op(session, username, node_type, edge_type)
+            return session.execute_read(Neo4jAnalysisClient._calculate_harmonic_centrality, username, node_type)
+        
+    def _calculate_harmonic_centrality(tx, username, node_type):
+            
+            harmonic_query = """CALL gds.alpha.closeness.harmonic.stream('{username}') YIELD nodeId, centrality RETURN gds.util.asNode(nodeId) AS {node_type}, centrality AS harmonic_centrality_score ORDER BY centrality DESC""".format(username=username, node_type=node_type)
+    
+            return tx.run(harmonic_query).data()
