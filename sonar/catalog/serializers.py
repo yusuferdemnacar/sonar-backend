@@ -15,11 +15,11 @@ class CatalogBaseSerializer(serializers.Serializer):
         fields = ('owner', 'catalog_name', 'paper_identifiers')
 
 class CatalogExtensionSerializer(serializers.Serializer):
-
+    catalog_extension_name = serializers.CharField()
     catalog_base = CatalogBaseSerializer(many=False)
     article_identifiers = ArticleSerializer(many=True)
 
     class Meta:
         model = CatalogExtension
-        unique_together = ('owner', 'catalog_base', 'paper_identifiers')
-        fields = ('catalog_base')
+        unique_together = ('owner', 'catalog_base', 'catalog_extension_name')
+        fields = ('catalog_base', )

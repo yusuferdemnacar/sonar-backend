@@ -113,11 +113,11 @@ class BuildGraphView(APIView):
         
         user = request.user
         catalog_name = request.data.get("catalog_name", None)
-        catalog_extention_id = request.data.get("catalog_extention_id", None)
+        catalog_extension_name = request.data.get("catalog_extension_name", None)
 
         fields = {
             'catalog_name': catalog_name,
-            'catalog_extention_id': catalog_extention_id
+            'catalog_extension_name': catalog_extension_name
         }
 
         validation_result = self.request_validator.validate(fields)
@@ -130,9 +130,9 @@ class BuildGraphView(APIView):
         if catalog_base is None:
             return Response({'error': 'catalog base not found'}, status=status.HTTP_400_BAD_REQUEST)
 
-        catalog_extention = CatalogExtension.objects.filter(catalog_base=catalog_base, id=catalog_extention_id).first()
+        catalog_extension = CatalogExtension.objects.filter(catalog_base=catalog_base, catalog_extension_name=catalog_extension_name).first()
 
-        if catalog_extention is None:
+        if catalog_extension is None:
             return Response({'error': 'catalog extention not found'}, status=status.HTTP_400_BAD_REQUEST)
 
         article_doi_set = set()
@@ -140,7 +140,7 @@ class BuildGraphView(APIView):
         for article in catalog_base.article_identifiers.all():
             article_doi_set.add(article.DOI)
 
-        for article in catalog_extention.article_identifiers.all():
+        for article in catalog_extension.article_identifiers.all():
             article_doi_set.add(article.DOI)
 
         article_nodes = set()

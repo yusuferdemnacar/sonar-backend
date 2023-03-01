@@ -19,6 +19,7 @@ class CatalogBase(CatalogAbstract):
         return "/".join([self.owner.username, self.catalog_name])
 
 class CatalogExtension(CatalogAbstract):
+    catalog_extension_name = models.CharField(max_length=100, null=True,blank=True)
     catalog_base = models.ForeignKey(CatalogBase, on_delete=models.CASCADE, related_name="catalog_extensions")
 
     def __str__(self):

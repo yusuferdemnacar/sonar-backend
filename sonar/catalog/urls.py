@@ -6,4 +6,7 @@ urlpatterns = [
     path("extension/", CatalogExtensionView.as_view(), name="extension"),
     path("base/all/", get_all_catalog_bases, name="base"),
     path("extension/all/", get_catalog_extensions, name="extension"),
+    path("extension/articles/", get_catalog_extension_articles, name="extension articles"),
+    path("base/articles/", get_catalog_base_articles, name="base articles"),
+    path("extension/names/", get_catalog_extension_names, name="extension articles"),
 ]

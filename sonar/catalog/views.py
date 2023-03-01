@@ -1,3 +1,6 @@
+import math
+import os
+
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
@@ -156,7 +159,7 @@ class CatalogBaseView(APIView):
                 return Response({'error': 'paper_doi: ' + paper_doi + ' not in catalog base'}, status=status.HTTP_400_BAD_REQUEST)
             
             catalog_base.article_identifiers.remove(paper_identifier)
-
+            paper_identifier.delete()
             catalog_base.save()
 
             return Response({"info": "paper_doi: " + paper_doi + " removed from catalog base"}, status=status.HTTP_200_OK)
@@ -193,11 +196,11 @@ class CatalogExtensionView(APIView):
         
         user = request.user
         catalog_name = request.query_params.get('catalog_name', None)
-        catalog_extension_id = request.query_params.get('catalog_extension_id', None)
+        catalog_extension_name = request.query_params.get('catalog_extension_name', None)
 
         fields = {
             'catalog_name': catalog_name,
-            'catalog_extension_id': catalog_extension_id
+            'catalog_extension_name': catalog_extension_name,
         }
 
         validation_result = self.request_validator.validate(fields)
@@ -210,7 +213,7 @@ class CatalogExtensionView(APIView):
         if not catalog_base:
             return Response({'error': 'catalog base not found'}, status=status.HTTP_404_NOT_FOUND)
 
-        catalog_extension = catalog_base.catalog_extensions.filter(id=catalog_extension_id).first()
+        catalog_extension = catalog_base.catalog_extensions.filter(catalog_extension_name=catalog_extension_name).first()
         
         if not catalog_extension:
             return Response({'error': 'catalog extension not found'}, status=status.HTTP_404_NOT_FOUND)
@@ -222,9 +225,11 @@ class CatalogExtensionView(APIView):
         
         user = request.user
         catalog_name = request.data.get('catalog_name', None)
+        catalog_extension_name = request.data.get('catalog_extension_name', None)
 
         fields = {
-            'catalog_name': catalog_name
+            'catalog_name': catalog_name,
+            'catalog_extension_name':catalog_extension_name
         }
 
         validation_result = self.request_validator.validate(fields)
@@ -237,22 +242,22 @@ class CatalogExtensionView(APIView):
         if not catalog_base:
             return Response({'error': 'catalog base not found'}, status=status.HTTP_404_NOT_FOUND)
 
-        catalog_extension = CatalogExtension.objects.create(catalog_base=catalog_base)
+        catalog_extension = CatalogExtension.objects.create(catalog_base=catalog_base, catalog_extension_name=catalog_extension_name)
 
         catalog_extension.save()
 
         return Response({"info": "catalog extension creation successful", "catalog_extension_id": catalog_extension.id}, status=status.HTTP_200_OK)
 
     def put(self, request):
-        
+
         user = request.user
         catalog_name = request.data.get('catalog_name', None)
-        catalog_extension_id = request.data.get('catalog_extension_id', None)
+        catalog_extension_name = request.data.get('catalog_extension_name', None)
         edit_type = request.data.get('edit_type', None)
 
         fields = {
             'catalog_name': catalog_name,
-            'catalog_extension_id': catalog_extension_id,
+            'catalog_extension_name': catalog_extension_name,
             'edit_type': edit_type
         }
 
@@ -266,11 +271,11 @@ class CatalogExtensionView(APIView):
         if not catalog_base:
             return Response({'error': 'catalog base not found'}, status=status.HTTP_404_NOT_FOUND)
 
-        catalog_extension = catalog_base.catalog_extensions.filter(id=catalog_extension_id).first()
+        catalog_extension = catalog_base.catalog_extensions.filter(catalog_extension_name=catalog_extension_name).first()
 
         if not catalog_extension:
             return Response({'error': 'catalog extension not found'}, status=status.HTTP_404_NOT_FOUND)
-
+        print(fields)
         if edit_type == "add_inbound_s2ag_citations":
 
             paper_doi_list = [article_identifier.DOI for article_identifier in catalog_base.article_identifiers.all()]
@@ -278,7 +283,7 @@ class CatalogExtensionView(APIView):
             s2ag_inbound_citation_articles = set()
 
             for paper_doi in paper_doi_list:
-
+                print(paper_doi)
                 offset = 0
 
                 next = True
@@ -286,7 +291,7 @@ class CatalogExtensionView(APIView):
                 while next:
 
                     s2ag_inbound_citations_lookup_url = "https://api.semanticscholar.org/graph/v1/paper/" + paper_doi + "/citations?fields=externalIds,title,abstract,year,citationCount,referenceCount,fieldsOfStudy,publicationTypes,publicationDate,authors&limit=1000&offset=" + str(offset)
-                    s2ag_inbound_citations_lookup_response = requests.get(s2ag_inbound_citations_lookup_url)
+                    s2ag_inbound_citations_lookup_response = requests.get(s2ag_inbound_citations_lookup_url, headers = {'x-api-key':os.environ.get('S2AG_API_KEY')})
 
                     if s2ag_inbound_citations_lookup_response.status_code == 200:
 
@@ -312,15 +317,23 @@ class CatalogExtensionView(APIView):
                                         s2ag_citing_paper_doi = s2ag_citing_paper_externalIds.get('DOI', None)
 
                                         if s2ag_citing_paper_doi is not None:
+
                                             s2ag_citing_paper_title = s2ag_citing_paper.get('title', None)
                                             s2ag_citing_paper_abstract = s2ag_citing_paper.get('abstract', None)
                                             s2ag_citing_paper_year = s2ag_citing_paper.get('year', None)
-                                            s2ag_citing_paper_citation_count = s2ag_citing_paper.get('citation_count', None)
-                                            s2ag_citing_paper_reference_count = s2ag_citing_paper.get('reference_count', None)
-                                            s2ag_citing_paper_fields_of_study = s2ag_citing_paper.get('fields_of_study', None)
-                                            s2ag_citing_paper_publication_types = s2ag_citing_paper.get('publication_types', None)
-                                            s2ag_citing_paper_publication_date = s2ag_citing_paper.get('publication_date', None)
+                                            s2ag_citing_paper_citation_count = s2ag_citing_paper.get('citationCount',
+                                                                                                    None)
+                                            s2ag_citing_paper_reference_count = s2ag_citing_paper.get('referenceCount',
+                                                                                                     None)
+                                            s2ag_citing_paper_fields_of_study = s2ag_citing_paper.get('fieldsOfStudy',
+                                                                                                     None)
+                                            s2ag_citing_paper_publication_types = s2ag_citing_paper.get(
+                                                'publicationTypes', None)
+                                            s2ag_citing_paper_publication_date = s2ag_citing_paper.get(
+                                                'publicationDate', None)
                                             s2ag_citing_paper_authors = s2ag_citing_paper.get('authors', None)
+                                            if s2ag_citing_paper_authors:
+                                                s2ag_citing_paper_authors = [author["name"] for author in s2ag_citing_paper_authors]
 
                                             s2ag_inbound_citation_articles.add(Article(
                                             DOI=s2ag_citing_paper_doi,
@@ -344,10 +357,10 @@ class CatalogExtensionView(APIView):
             created = Article.objects.bulk_create(s2ag_inbound_citation_articles, ignore_conflicts=True)
             catalog_extension.article_identifiers.add(*created)
 
-            return Response({"info": "s2ag inbound citations added"}, status=status.HTTP_200_OK)
+            return Response({"info": "s2ag inbound citations added", "catalog_extension": CatalogExtensionSerializer(catalog_extension).data}, status=status.HTTP_200_OK)
 
         elif edit_type == "add_outbound_s2ag_citations":
-
+            print("llllolll")
             paper_doi_list = [article_identifier.DOI for article_identifier in catalog_base.article_identifiers.all()]
 
             s2ag_outbound_citation_articles = set()
@@ -359,9 +372,9 @@ class CatalogExtensionView(APIView):
                 next = True
 
                 while next:
-
+                    print("lay")
                     s2ag_outbound_citations_lookup_url = "https://api.semanticscholar.org/graph/v1/paper/" + paper_doi + "/references?fields=externalIds,title,abstract,year,citationCount,referenceCount,fieldsOfStudy,publicationTypes,publicationDate,authors&limit=1000&offset=" + str(offset)
-                    s2ag_outbound_citations_lookup_response = requests.get(s2ag_outbound_citations_lookup_url)
+                    s2ag_outbound_citations_lookup_response = requests.get(s2ag_outbound_citations_lookup_url, {'x-api-key':os.environ.get('S2AG_API_KEY')})
 
                     if s2ag_outbound_citations_lookup_response.status_code == 200:
 
@@ -390,17 +403,19 @@ class CatalogExtensionView(APIView):
                                             s2ag_citing_paper_title = s2ag_cited_paper.get('title', None)
                                             s2ag_citing_paper_abstract = s2ag_cited_paper.get('abstract', None)
                                             s2ag_citing_paper_year = s2ag_cited_paper.get('year', None)
-                                            s2ag_citing_paper_citation_count = s2ag_cited_paper.get('citation_count',
+                                            s2ag_citing_paper_citation_count = s2ag_cited_paper.get('citationCount',
                                                                                                      None)
-                                            s2ag_citing_paper_reference_count = s2ag_cited_paper.get('reference_count',
+                                            s2ag_citing_paper_reference_count = s2ag_cited_paper.get('referenceCount',
                                                                                                       None)
-                                            s2ag_citing_paper_fields_of_study = s2ag_cited_paper.get('fields_of_study',
+                                            s2ag_citing_paper_fields_of_study = s2ag_cited_paper.get('fieldsOfStudy',
                                                                                                       None)
                                             s2ag_citing_paper_publication_types = s2ag_cited_paper.get(
-                                                'publication_types', None)
+                                                'publicationTypes', None)
                                             s2ag_citing_paper_publication_date = s2ag_cited_paper.get(
-                                                'publication_date', None)
+                                                'publicationDate', None)
                                             s2ag_citing_paper_authors = s2ag_cited_paper.get('authors', None)
+                                            if s2ag_citing_paper_authors:
+                                                s2ag_citing_paper_authors = [author["name"] for author in s2ag_citing_paper_authors]
 
                                             s2ag_outbound_citation_articles.add(Article(
                                                 DOI=s2ag_cited_paper_doi,
@@ -424,21 +439,87 @@ class CatalogExtensionView(APIView):
 
             created = Article.objects.bulk_create(s2ag_outbound_citation_articles, ignore_conflicts=True)
             catalog_extension.article_identifiers.add(*created)
+            print("heere")
+            return Response({"info": "s2ag outbound citations added", "catalog_extension": CatalogExtensionSerializer(catalog_extension).data}, status=status.HTTP_200_OK)
 
-            return Response({"info": "s2ag outbound citations added"}, status=status.HTTP_200_OK)
+        elif edit_type == "add_s2ag_paper_id":
+            paper_doi = request.data.get('paper_doi', None)
+            title = request.data.get('title', None)
+            abstract = request.data.get('abstract', None)
+            year = request.data.get('year', None)
+            citation_count = request.data.get('citation_count', None)
+            reference_count = request.data.get('reference_count', None)
+            fields_of_study = request.data.get('fields_of_study', None)
+            publication_types = request.data.get('publication_types', None)
+            publication_date = request.data.get('publication_date', None)
+            authors = request.data.get('authors', None)
 
-        if edit_type == "remove_s2ag_paper_id":
-            pass
+            fields = {
+                'paper_doi': paper_doi
+            }
+
+            validation_result = self.request_validator.validate(fields)
+
+            if validation_result:
+                return validation_result
+
+            article, _ = Article.objects.get_or_create(DOI=paper_doi)
+
+            if article in catalog_extension.article_identifiers.all():
+                return Response({'error': 'paper_doi: ' + paper_doi + ' already in catalog extension: ' + catalog_extension_name},
+                                status=status.HTTP_400_BAD_REQUEST)
+            article.title = title
+            article.abstract = abstract
+            article.year = year
+            article.citation_count = citation_count
+            article.reference_count = reference_count
+            article.fields_of_study = fields_of_study
+            article.publication_types = publication_types
+            article.publication_date = publication_date
+            article.authors = authors
+            article.save()
+
+            catalog_extension.article_identifiers.add(article)
+
+            catalog_extension_name.save()
+
+            return Response({"info": "paper_doi: " + paper_doi + " added to catalog extension: " + catalog_extension_name},
+                            status=status.HTTP_200_OK)
+
+        elif edit_type == "remove_s2ag_paper_id":
+            print('heres')
+            paper_doi = request.data.get('paper_doi', None)
+
+            fields = {
+                'paper_doi': paper_doi
+            }
+
+            validation_result = self.request_validator.validate(fields)
+
+            if validation_result:
+                return validation_result
+
+            catalog_extension_paper_identifiers = catalog_extension.article_identifiers.all()
+
+            paper_identifier = Article.objects.filter(DOI=paper_doi).first()
+
+            if paper_identifier not in catalog_extension_paper_identifiers:
+                return Response({'error': 'paper_doi: ' + paper_doi + ' not in catalog extension'},
+                                status=status.HTTP_400_BAD_REQUEST)
+
+            catalog_extension.article_identifiers.remove(paper_identifier)
+
+            return Response(status=status.HTTP_200_OK)
 
     def delete(self, request):
         
         user = request.user
         catalog_name = request.data.get('catalog_name', None)
-        catalog_extension_id = request.data.get('catalog_extension_id', None)
+        catalog_extension_name = request.data.get('catalog_extension_name', None)
 
         fields = {
             'catalog_name': catalog_name,
-            'catalog_extension_id': catalog_extension_id
+            'catalog_extension_name': catalog_extension_name
         }
 
         validation_result = self.request_validator.validate(fields)
@@ -451,7 +532,7 @@ class CatalogExtensionView(APIView):
         if not catalog_base:
             return Response({'error': 'catalog base not found'}, status=status.HTTP_404_NOT_FOUND)
 
-        catalog_extension = catalog_base.catalog_extensions.filter(id=catalog_extension_id).first()
+        catalog_extension = catalog_base.catalog_extensions.filter(catalog_extension_name=catalog_extension_name).first()
 
         if not catalog_extension:
             return Response({'error': 'catalog extension not found'}, status=status.HTTP_404_NOT_FOUND)
@@ -486,3 +567,88 @@ def get_catalog_extensions(request):
 
     catalog_extensions_serialized = CatalogExtensionSerializer(catalog_extensions, many=True)
     return Response(catalog_extensions_serialized.data, status=status.HTTP_200_OK)
+
+@api_view(['GET',])
+@permission_classes([IsAuthenticated])
+def get_catalog_extension_articles(request):
+    user = request.user
+    catalog_name = request.query_params.get('catalog_name', None)
+    catalog_extension_name = request.query_params.get('catalog_extension_name', None)
+
+    fields = {
+        'catalog_name': catalog_name,
+        'catalog_extension_name': catalog_extension_name,
+    }
+
+
+    catalog_base = CatalogBase.objects.filter(owner=user, catalog_name=catalog_name).first()
+
+    if not catalog_base:
+        return Response({'error': 'catalog base not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    catalog_extension = catalog_base.catalog_extensions.filter(catalog_extension_name=catalog_extension_name).first()
+
+    if not catalog_extension:
+        return Response({'error': 'catalog extension not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    offset = int(request.GET.get('offset', None))
+    article_count = catalog_extension.article_identifiers.count()
+    articles = catalog_extension.article_identifiers.all()[((offset-1)*25):((offset)*25)]
+
+    serialized_data = ArticleSerializer(articles, many=True)
+    articles = serialized_data.data
+    data = {
+        'articles': articles,
+        'total_count':article_count,
+        'page_count':math.ceil(article_count/25)
+    }
+
+    return Response(data, status=status.HTTP_200_OK)
+
+@api_view(['GET',])
+@permission_classes([IsAuthenticated])
+def get_catalog_extension_names(request):
+    user = request.user
+    catalog_name = request.GET.get('catalog_name', None)
+    if not catalog_name:
+        return Response({'error': 'no catalog base given'}, status=status.HTTP_404_NOT_FOUND)
+
+    catalog_base = CatalogBase.objects.filter(owner=user, catalog_name=catalog_name).first()
+
+    if not catalog_base:
+        return Response({'error': 'catalog base not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    catalog_extensions = CatalogExtension.objects.filter(catalog_base=catalog_base).values_list('catalog_extension_name', flat=True)
+
+
+    return Response(catalog_extensions, status=status.HTTP_200_OK)
+
+@api_view(['GET',])
+@permission_classes([IsAuthenticated])
+def get_catalog_base_articles(request):
+
+    user = request.user
+    catalog_name = request.query_params.get('catalog_name', None)
+    offset = int(request.GET.get('offset', None))
+    fields = {
+        'catalog_name': catalog_name
+    }
+
+
+    catalog_base = CatalogBase.objects.filter(owner=user, catalog_name=catalog_name).first()
+
+    if not catalog_base:
+        return Response({'error': 'catalog base not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    article_count = catalog_base.article_identifiers.count()
+    articles = catalog_base.article_identifiers.all()[((offset - 1) * 25):((offset) * 25)]
+
+    serialized_data = ArticleSerializer(articles, many=True)
+    articles = serialized_data.data
+    data = {
+    'articles': articles,
+    'total_count': article_count,
+    'page_count': math.ceil(article_count / 25)
+    }
+
+    return Response(data, status=status.HTTP_200_OK)
