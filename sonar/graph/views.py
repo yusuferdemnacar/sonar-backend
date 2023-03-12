@@ -1,3 +1,4 @@
+from rest_framework.decorators import permission_classes, api_view
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
@@ -192,3 +193,15 @@ class BuildGraphView(APIView):
         print("Graph built in " + str(graph_building_time) + " seconds")
 
         return Response({'success': 'graph built'}, status=status.HTTP_200_OK)
+
+@api_view(['GET',])
+@permission_classes([IsAuthenticated])
+def get_article(request):
+    user = request.user
+    neo4j_client = Neo4jClient()
+
+    DOI = request.query_params.get('DOI')
+    result = neo4j_client.driver.session().run(f'MATCH (n:Article) WHERE n.DOI=\'{DOI}\' RETURN n')
+    data = result.data()
+
+    return Response(data, status=status.HTTP_200_OK)
