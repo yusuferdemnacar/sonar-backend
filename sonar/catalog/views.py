@@ -481,7 +481,7 @@ class CatalogExtensionView(APIView):
 
             catalog_extension.article_identifiers.add(article)
 
-            catalog_extension_name.save()
+            catalog_extension.save()
 
             return Response({"info": "paper_doi: " + paper_doi + " added to catalog extension: " + catalog_extension_name},
                             status=status.HTTP_200_OK)
