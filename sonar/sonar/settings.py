@@ -40,7 +40,6 @@ ALLOWED_HOSTS = ["*"]
 
 INSTALLED_APPS = [
     'search',
-    's2ag',
     'catalog',
     'authmngr',
     'article',
