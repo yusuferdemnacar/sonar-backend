@@ -1,6 +1,6 @@
 from neo4j_client import Neo4jClient
-from article.serializers import ArticleSerializer
-from author.serializers import AuthorSerializer
+
+
 
 class Neo4jGraphClient(Neo4jClient):
 

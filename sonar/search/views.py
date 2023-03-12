@@ -2,9 +2,9 @@ import math
 import requests
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from .models import *
-from article.models import *
-from article.serializers import *
+
+from article.schemas import Article
+
 
 class S2AGSearchView(APIView):
 
@@ -49,7 +49,7 @@ class S2AGSearchView(APIView):
                 authors=authors
             )
             
-            search_results.append(ArticleSerializer(article).data)            
+            search_results.append(article)
 
         total_page_count = math.ceil(int(s2ag_response.json()['total'])/25)
 
