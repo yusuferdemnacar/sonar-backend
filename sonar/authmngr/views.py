@@ -6,8 +6,13 @@ from rest_framework.permissions import IsAuthenticated
 from django.contrib.auth import authenticate, login, logout
 from .serializers import *
 from graph.neo4j_graph_client import Neo4jGraphClient
+from .neo4j_service import UserService
+from neo4j_client import Neo4jClient
 
 class RegisterView(APIView):
+
+    neo4j_client = Neo4jClient()
+    user_service = UserService(neo4j_client)
 
     def post(self, request):
 
@@ -15,6 +20,7 @@ class RegisterView(APIView):
 
         if user_serializer.is_valid():
             user_serializer.save()
+            self.user_service.create_user_node(user_serializer.data['username'])
             return Response(data=user_serializer.data, status=status.HTTP_201_CREATED)
         else:
             return Response(data=user_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
