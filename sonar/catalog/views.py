@@ -10,6 +10,9 @@ from .serializers import *
 from rest_framework.decorators import api_view, permission_classes, authentication_classes
 from rest_framework.permissions import IsAuthenticated, AllowAny
 import requests
+from neo4j_client import Neo4jClient
+from .neo4j_service import CatalogService
+from .s2ag_service import S2AGService
 
 class RequestValidator():
 
@@ -25,14 +28,17 @@ class CatalogBaseView(APIView):
 
     permission_classes = (IsAuthenticated,)
     request_validator = RequestValidator()
+    neo4j_client = Neo4jClient()
+    catalog_service = CatalogService(neo4j_client)
+    s2ag_service = S2AGService()
 
     def get(self, request):
         
         user = request.user
-        catalog_name = request.query_params.get('catalog_name', None)
+        catalog_base_name = request.query_params.get('catalog_base_name', None)
 
         fields = {
-            'catalog_name': catalog_name
+            'catalog_base_name': catalog_base_name
         }
 
         validation_result = self.request_validator.validate(fields)
@@ -40,22 +46,21 @@ class CatalogBaseView(APIView):
         if validation_result:
             return validation_result
 
-        catalog_base = CatalogBase.objects.filter(owner=user, catalog_name=catalog_name).first()
+        catalog_base_exists = self.catalog_service.check_if_base_exists(user.username, catalog_base_name)
 
-        if not catalog_base:
+        if not catalog_base_exists:
             return Response({'error': 'catalog base not found'}, status=status.HTTP_404_NOT_FOUND)
         
-        catalog_base_serialized = CatalogBaseSerializer(instance=catalog_base)
-        return Response(catalog_base_serialized.data, status=status.HTTP_200_OK)
+        catalog_base_articles = self.catalog_service.get_base_articles(user.username, catalog_base_name)
+        return Response(catalog_base_articles, status=status.HTTP_200_OK)
 
     def post(self, request):
         
         user = request.user
-        print(request.POST)
-        catalog_name = request.POST.get('catalog_name', None)
+        catalog_base_name = request.POST.get('catalog_base_name', None)
 
         fields = {
-            'catalog_name': catalog_name
+            'catalog_base_name': catalog_base_name
         }
 
         validation_result = self.request_validator.validate(fields)
@@ -63,23 +68,23 @@ class CatalogBaseView(APIView):
         if validation_result:
             return validation_result
 
-        catalog_base, created = CatalogBase.objects.get_or_create(owner=user, catalog_name=catalog_name)
+        catalog_base_exists = self.catalog_service.check_if_base_exists(user.username, catalog_base_name)
 
-        if not created:
+        if catalog_base_exists:
             return Response({'error': 'catalog base already exists'}, status=status.HTTP_400_BAD_REQUEST)
 
-        catalog_base.save()
+        self.catalog_service.create_base_node(user.username, catalog_base_name)
 
-        return Response({"info": "catalog base creation successful", "catalog_id": catalog_base.id}, status=status.HTTP_200_OK)
+        return Response({"info": "catalog base creation successful"}, status=status.HTTP_200_OK)
 
     def put(self, request):
         
         user = request.user
-        catalog_name = request.data.get('catalog_name', None)
+        catalog_base_name = request.data.get('catalog_base_name', None)
         edit_type = request.data.get('edit_type', None)
 
         fields = {
-            'catalog_name': catalog_name,
+            'catalog_base_name': catalog_base_name,
             'edit_type': edit_type
         }
 
@@ -88,28 +93,53 @@ class CatalogBaseView(APIView):
         if validation_result:
             return validation_result
 
-        catalog_base = CatalogBase.objects.filter(owner=user, catalog_name=catalog_name).first()
+        catalog_base_exists = self.catalog_service.check_if_base_exists(user.username, catalog_base_name)
 
-        if not catalog_base:
+        if not catalog_base_exists:
             return Response({'error': 'catalog base not found'}, status=status.HTTP_404_NOT_FOUND)
 
-        if edit_type == "add_paper_doi":
+        if edit_type == "add_article":
 
-            paper_doi = request.data.get('paper_doi', None)
-            title = request.data.get('title', None)
-            abstract = request.data.get('abstract', None)
-            year = request.data.get('year', None)
-            citation_count = request.data.get('citation_count', None)
-            reference_count = request.data.get('reference_count', None)
-            fields_of_study = request.data.get('fields_of_study', None)
-            publication_types = request.data.get('publication_types', None)
-            publication_date = request.data.get('publication_date', None)
-            authors = request.data.get('authors', None)
-
-
+            article_doi = request.data.get('article_doi', None)
 
             fields = {
-                'paper_doi': paper_doi
+                'article_doi': article_doi
+            }
+
+            validation_result = self.request_validator.validate(fields)
+
+            if validation_result:
+                return validation_result
+            
+            article_in_base = self.catalog_service.check_if_article_in_base(user.username, catalog_base_name, article_doi)
+
+            if article_in_base:
+
+                return Response({'error': 'article_doi: ' + article_doi + ' already in catalog base: ' + catalog_base_name}, status=status.HTTP_400_BAD_REQUEST)
+
+            article_result = self.s2ag_service.get_article(article_doi)
+
+            if type(article_result) is not dict:
+
+                return Response({'error': 'Error while getting article from external source'}, status=status.HTTP_502_BAD_GATEWAY)
+            
+            article_exists = self.catalog_service.check_if_article_exists(article_doi)
+
+            if not article_exists:
+                for author in article_result.get("authors"):
+                    self.catalog_service.create_author_node(author)
+                self.catalog_service.create_article_node(article_result.get("article"), article_result.get("authors"), article_result.get("inbound_citations"), article_result.get("outbound_citations"))
+            
+            self.catalog_service.add_article_to_base(user.username, catalog_base_name, article_doi)
+
+            return Response({"info": "article with doi: " + article_doi + " added to catalog base: " + catalog_base_name}, status=status.HTTP_200_OK)
+
+        if edit_type == "remove_article":
+
+            article_doi = request.data.get('article_doi', None)
+
+            fields = {
+                'article_doi': article_doi
             }
 
             validation_result = self.request_validator.validate(fields)
@@ -117,60 +147,23 @@ class CatalogBaseView(APIView):
             if validation_result:
                 return validation_result
 
-            article, _ = Article.objects.get_or_create(DOI=paper_doi)
+            article_in_base = self.catalog_service.check_if_article_in_base(user.username, catalog_base_name, article_doi)
+
+            if not article_in_base:
+                return Response({'error': 'article_doi: ' + article_doi + ' not in catalog base: ' + catalog_base_name}, status=status.HTTP_400_BAD_REQUEST)
             
-            if article in catalog_base.article_identifiers.all():
-                return Response({'error': 'paper_doi: ' + paper_doi + ' already in catalog base: ' + catalog_name}, status=status.HTTP_400_BAD_REQUEST)
-            article.title=title
-            article.abstract=abstract
-            article.year=year
-            article.citation_count=citation_count
-            article.reference_count=reference_count
-            article.fields_of_study=fields_of_study
-            article.publication_types=publication_types
-            article.publication_date=publication_date
-            article.authors=authors
-            article.save()
+            self.catalog_service.remove_article_from_base(user.username, catalog_base_name, article_doi)
 
-            catalog_base.article_identifiers.add(article)
 
-            catalog_base.save()
-
-            return Response({"info": "paper_doi: " + paper_doi + " added to catalog base: " + catalog_name}, status=status.HTTP_200_OK)
-
-        if edit_type == "remove_paper_doi":
-
-            paper_doi = request.data.get('paper_doi', None)
-
-            fields = {
-                'paper_doi': paper_doi
-            }
-
-            validation_result = self.request_validator.validate(fields)
-
-            if validation_result:
-                return validation_result
-
-            catalog_base_paper_identifiers = catalog_base.article_identifiers.all()
-
-            paper_identifier = Article.objects.filter(DOI=paper_doi).first()
-
-            if paper_identifier not in catalog_base_paper_identifiers:
-                return Response({'error': 'paper_doi: ' + paper_doi + ' not in catalog base'}, status=status.HTTP_400_BAD_REQUEST)
-            
-            catalog_base.article_identifiers.remove(paper_identifier)
-            paper_identifier.delete()
-            catalog_base.save()
-
-            return Response({"info": "paper_doi: " + paper_doi + " removed from catalog base"}, status=status.HTTP_200_OK)
+            return Response({"info": "article with doi: " + article_doi + " removed from catalog base: " + catalog_base_name}, status=status.HTTP_200_OK)
 
     def delete(self, request):
         
         user = request.user
-        catalog_name = request.data.get('catalog_name', None)
+        catalog_base_name = request.data.get('catalog_base_name', None)
 
         fields = {
-            'catalog_name': catalog_name
+            'catalog_base_name': catalog_base_name
         }
 
         validation_result = self.request_validator.validate(fields)
@@ -178,12 +171,12 @@ class CatalogBaseView(APIView):
         if validation_result:
             return validation_result
 
-        catalog_base = CatalogBase.objects.filter(owner=user, catalog_name=catalog_name).first()
+        catalog_base_exists = self.catalog_service.check_if_base_exists(user.username, catalog_base_name)
 
-        if not catalog_base:
+        if not catalog_base_exists:
             return Response({'error': 'catalog base not found'}, status=status.HTTP_404_NOT_FOUND)
 
-        catalog_base.delete()
+        self.catalog_service.delete_base_node(user.username, catalog_base_name)
 
         return Response({"info": "catalog base deleted"}, status=status.HTTP_200_OK)
 
