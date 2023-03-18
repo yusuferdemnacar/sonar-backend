@@ -26,6 +26,16 @@ class CatalogService():
 
         self.neo4j_graph_client.run(query, parameters={"catalog_base_name": catalog_base_name, "username": username})
 
+    def create_extension_node(self, username: str, catalog_base_name: str, catalog_extension_name: str):
+
+        query = """
+            MATCH (cb:CatalogBase {name: $catalog_base_name})-[:OWNED_BY]->(u:User {username: $username})
+            MERGE (ce:CatalogExtension {name: $catalog_extension_name})
+            MERGE (ce)-[:EXTENDS]->(cb)
+        """
+
+        self.neo4j_graph_client.run(query, parameters={"catalog_base_name": catalog_base_name, "username": username, "catalog_extension_name": catalog_extension_name})
+
     def create_article_node(self, article: Article, authors: List[Author] ,inbound_citation_dois: List[str], outbound_citation_dois: List[str]):
         
         query = """
@@ -48,22 +58,23 @@ class CatalogService():
                 a.journal = $article.journal
             WITH a, $author_names AS author_names
             UNWIND author_names AS author_name
-            MATCH (au:Author {name: author_name})
+            MATCH (au:Author)
+            WHERE au.name = author_name
             MERGE (a)-[:AUTHORED_BY]->(au)
             WITH a, $inbound_citation_dois AS inbound_citation_dois
             UNWIND inbound_citation_dois AS inbound_citation_doi
-            MATCH (c:Article {doi: inbound_citation_doi})
-            MERGE (a)-[:CITES]->(c)
+            MATCH (c:Article)
+            WHERE c.doi = inbound_citation_doi
+            MERGE (c)-[:CITES]->(a)
             WITH a, $outbound_citation_dois AS outbound_citation_dois
             UNWIND outbound_citation_dois AS outbound_citation_doi
-            MATCH (c:Article {doi: outbound_citation_doi})
-            MERGE (c)-[:CITES]->(a)
+            MATCH (c:Article)
+            WHERE c.doi = outbound_citation_doi
+            MERGE (a)-[:CITES]->(c)
 
         """
 
         author_names = [author["name"] for author in authors]
-
-        print("author_names", author_names)
 
         self.neo4j_graph_client.run(query, parameters={"doi": article["doi"], "article": article, "author_names": author_names, "inbound_citation_dois": inbound_citation_dois, "outbound_citation_dois": outbound_citation_dois})
 
@@ -93,6 +104,17 @@ class CatalogService():
 
         self.neo4j_graph_client.run(query, parameters={"doi": doi, "catalog_base_name": catalog_base_name, "username": username})
 
+    def add_article_to_extension(self, username, catalog_base_name, catalog_extension_name, doi):
+            
+            query = """
+                MATCH (ce:CatalogExtension)-[e:EXTENDS]->(cb:CatalogBase)-[o:OWNED_BY]->(u:User), (a:Article)
+                WHERE ce.name = $catalog_extension_name AND cb.name = $catalog_base_name AND u.username = $username AND a.doi = $doi
+                MERGE (a)-[i:IN]->(ce)
+                RETURN a, ce
+            """
+    
+            self.neo4j_graph_client.run(query, parameters={"doi": doi, "catalog_base_name": catalog_base_name, "catalog_extension_name": catalog_extension_name, "username": username})
+
     def remove_article_from_base(self, username, catalog_base_name, doi):
 
         query = """
@@ -113,7 +135,19 @@ class CatalogService():
 
         result = self.neo4j_graph_client.run(query, parameters={"catalog_base_name": catalog_base_name, "username": username})
 
-        print("result", result)
+        articles = [Article(**record["article"]) for record in result]
+
+        return articles
+    
+    def get_extension_articles(self, username, catalog_base_name, extension_name) -> List[Article]:
+
+        query = """
+            MATCH (a:Article)-[i:IN]->(c:CatalogExtension)-[e:EXTENDS]->(cb:CatalogBase)-[o:OWNED_BY]->(u:User)
+            WHERE cb.name = $catalog_base_name AND u.username = $username AND c.name = $extension_name
+            RETURN a AS article
+        """
+
+        result = self.neo4j_graph_client.run(query, parameters={"catalog_base_name": catalog_base_name, "username": username, "extension_name": extension_name})
 
         articles = [Article(**record["article"]) for record in result]
 
@@ -144,25 +178,50 @@ class CatalogService():
 
         result = self.neo4j_graph_client.run(query, parameters={"catalog_base_name": catalog_base_name, "username": username})
 
-        print("result:", result)
+        if len(result) != 0:
+            return True
+        else:
+            return False
+        
+    def check_if_extension_exists(self, username, base_name, extension_name) -> bool:
+        
+        query = """
+            MATCH (ce:CatalogExtension)-[e:EXTENDS]->(cb:CatalogBase)-[o:OWNED_BY]->(u:User)
+            WHERE ce.name = $extension_name AND cb.name = $base_name AND u.username = $username
+            RETURN e AS CatalogExtension
+        """
+
+        result = self.neo4j_graph_client.run(query, parameters={"extension_name": extension_name, "base_name": base_name, "username": username})
 
         if len(result) != 0:
             return True
         else:
             return False
         
-    def check_if_article_exists(self, doi) -> bool:
+    def get_existing_articles(self, dois) -> bool:
         
         query = """
             MATCH (a:Article)
-            WHERE a.doi = $doi
-            RETURN a AS Article
+            WHERE a.doi IN $doi_list
+            RETURN a AS article
         """
 
-        result = self.neo4j_graph_client.run(query, parameters={"doi": doi})
+        result = self.neo4j_graph_client.run(query, parameters={"doi_list": list(dois)})
 
-        if len(result) != 0:
-            return True
-        else:
-            return False
-        
+        articles = [Article(**record["article"]) for record in result]
+
+        return articles
+    
+    def get_existing_authors(self, author_name_list) -> bool:
+
+        query = """
+            MATCH (a:Author)
+            WHERE a.name IN $author_name_list
+            RETURN a AS author
+        """
+
+        result = self.neo4j_graph_client.run(query, parameters={"author_name_list": author_name_list})
+
+        authors = [Author(**record["author"]) for record in result]
+
+        return authors
