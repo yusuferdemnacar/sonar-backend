@@ -112,7 +112,12 @@ class CatalogBaseView(APIView):
             if validation_result:
                 return validation_result
             
+            t = time.time()
+            
             article_in_base = self.catalog_service.check_if_article_in_base(user.username, catalog_base_name, article_doi)
+
+            print("article in base: ", time.time() - t)
+            t = time.time()
 
             if article_in_base:
 
@@ -120,25 +125,34 @@ class CatalogBaseView(APIView):
 
             article_result = self.s2ag_service.get_articles([article_doi])
 
+            print("get articles: ", time.time() - t)
+            t = time.time()
+
             if type(article_result) is int:
                 return Response({'error': 'Error while getting article from external source'}, status=status.HTTP_502_BAD_GATEWAY)
-            
-            article_result = article_result[0]
+
+            # article
+            # authors
+            # inbound_citations
+            # outbound_citations
+            # authored_by
             
             existing_articles = self.catalog_service.get_existing_articles([article_doi])
 
+            print("existing articles: ", time.time() - t)
+            t = time.time()
+
             if not existing_articles:
 
-                existing_authors = self.catalog_service.get_existing_authors(article_result.get("authors"))
-                existing_author_names = [author.get("name") for author in existing_authors]
+                self.catalog_service.create_article_patterns(article_result)
 
-                for author in article_result.get("authors"):
-                    if author.get("name") not in existing_author_names:
-                        self.catalog_service.create_author_node(author)
-                
-                self.catalog_service.create_article_node(article_result.get("article"), article_result.get("authors"), article_result.get("inbound_citations"), article_result.get("outbound_citations"))
+                print("create article pattern: ", time.time() - t)
+                t = time.time()
             
             self.catalog_service.add_article_to_base(user.username, catalog_base_name, article_doi)
+
+            print("add article to base: ", time.time() - t)
+            t = time.time()
 
             return Response({"info": "article with doi: " + article_doi + " added to catalog base: " + catalog_base_name}, status=status.HTTP_200_OK)
 
@@ -286,54 +300,33 @@ class CatalogExtensionView(APIView):
         if edit_type == "add_inbound_s2ag_citations":
 
             t = time.time()
+
             base_articles = self.catalog_service.get_base_articles(user.username, catalog_base_name)
+
             print("base_articles: ", time.time() - t)
             t = time.time()
+
             base_article_dois = [article["doi"] for article in base_articles]
-
-
-
-            inbound_citation_article_dois = self.s2ag_service.get_inbound_citation_article_dois(base_article_dois)
+            inbound_citation_article_dois = set(self.s2ag_service.get_inbound_citation_article_dois(base_article_dois))
+            
             print("inbound_citation_article_dois: ", time.time() - t)
             t = time.time()
+
             existing_articles = self.catalog_service.get_existing_articles(inbound_citation_article_dois)
             existing_article_dois = [article["doi"] for article in existing_articles]
+
             print("existing_article_dois: ", time.time() - t)
             t = time.time()
-            new_article_dois = set(inbound_citation_article_dois) - set(existing_article_dois)
+
+            new_article_dois = inbound_citation_article_dois - set(existing_article_dois)
             new_article_bundles = self.s2ag_service.get_articles(new_article_dois)
+
             print("new_articles: ", time.time() - t)
             t = time.time()
-            inbound_citation_authors = []
-            for article_bundle in new_article_bundles:
-                inbound_citation_authors.extend(article_bundle["authors"])
-            inbound_citation_author_names = [author["name"] for author in inbound_citation_authors]
-            print("inbound_citation_authors: ", time.time() - t)
-            t = time.time()
-            existing_author_names = [author["name"] for author in self.catalog_service.get_existing_authors(inbound_citation_author_names)]
-            print("existing_author_names: ", time.time() - t)
-            t = time.time()
-            new_author_names = set(inbound_citation_author_names) - set(existing_author_names)
-            new_authors = [author for author in inbound_citation_authors if author["name"] in new_author_names]
-            print("new_authors: ", time.time() - t)
-            t = time.time()                
 
-            for author in new_authors:
-                self.catalog_service.create_author_node(author)
+            self.catalog_service.create_article_patterns(new_article_bundles)
 
-            print("create_author_node: ", time.time() - t)
-            t = time.time()
-
-            for article_bundle in new_article_bundles:
-                article = article_bundle["article"]
-                authors = article_bundle["authors"]
-                inbound_citation_article_dois = article_bundle["inbound_citation_dois"]
-                outbound_citation_article_dois = article_bundle["outbound_citation_dois"]
-                print("in:", inbound_citation_article_dois)
-                print("out", outbound_citation_article_dois)
-                self.catalog_service.create_article_node(article, authors, inbound_citation_article_dois, outbound_citation_article_dois)
-
-            print("create_article_node: ", time.time() - t)
+            print("create_article_patterns: ", time.time() - t)
             t = time.time()
             
             for article_doi in inbound_citation_article_dois:

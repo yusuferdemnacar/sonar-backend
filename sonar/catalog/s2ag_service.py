@@ -12,6 +12,8 @@ class S2AGService():
         print("Getting article details from S2AG API for DOI {doi}".format(doi=doi))
         article_bundle = {}
 
+        retry_count = 0
+
         while True:
 
             s2ag_article_details_url = "https://api.semanticscholar.org/graph/v1/paper/{doi}?fields=externalIds,url,title,abstract,venue,year,referenceCount,citationCount,influentialCitationCount,isOpenAccess,openAccessPdf,fieldsOfStudy,publicationVenue,publicationTypes,publicationDate,journal,authors.url,authors.name,authors.aliases,authors.affiliations,authors.homepage,authors.paperCount,authors.citationCount,authors.hIndex,citations.externalIds,references.externalIds".format(doi=doi)
@@ -20,7 +22,11 @@ class S2AGService():
             if response.status_code != 200:
                 status = response.status_code
                 print("S2AG API returned status code {status_code} for DOI {doi}".format(status_code=status, doi=doi))
-                continue
+                if retry_count < 5:
+                    retry_count += 1
+                    continue
+                else:
+                    return response.status_code
 
             response_dict = json.loads(response.text)
             article_dict["doi"] = doi
@@ -44,7 +50,18 @@ class S2AGService():
             article_dict["publication_types"] = response_dict["publicationTypes"]
             article_dict["publication_date"] = response_dict["publicationDate"]
             # article_dict["journal"] = response_dict["journal"]
-            authors = [Author(**author_dict) for author_dict in response_dict["authors"]]
+            authors = [Author(
+                name=author_dict["name"],
+                s2ag_id=author_dict["authorId"],
+                # external_ids={},
+                s2ag_url=author_dict["url"],
+                aliases=author_dict["aliases"],
+                affiliations=author_dict["affiliations"],
+                homepage=author_dict["homepage"],
+                paper_count=author_dict["paperCount"],
+                citation_count=author_dict["citationCount"],
+                h_index=author_dict["hIndex"]
+            ) for author_dict in response_dict["authors"] if author_dict.get("authorId") is not None]
             inbound_citation_dois = [citation["externalIds"]["DOI"] for citation in response_dict["citations"] if (citation.get("paperId") is not None and citation.get("externalIds") is not None and "DOI" in citation["externalIds"].keys())]
             outbound_citation_dois = [reference["externalIds"]["DOI"] for reference in response_dict["references"] if (reference.get("paperId") is not None and reference.get("externalIds") is not None and "DOI" in reference["externalIds"].keys())]
 
@@ -64,46 +81,57 @@ class S2AGService():
             article_bundles = pool.map(self.get_article, dois)
 
         return article_bundles
+    
+    def get_inbound_citation_article_dois(self, article_dois):
 
-    def get_inbound_citation_article_dois(self, base_article_dois):
+        inbound_citation_article_dois = []
+        inbound_citation_article_dois_lists = []
+
+        with ThreadPool(50) as pool:
+            inbound_citation_article_dois_lists = pool.map(self.get_inbound_citation_article_doi, article_dois)
+
+        for inbound_citation_article_dois_list in inbound_citation_article_dois_lists:
+            inbound_citation_article_dois += inbound_citation_article_dois_list
+
+        return inbound_citation_article_dois
+
+    def get_inbound_citation_article_doi(self, article_doi):
 
         inbound_citation_article_dois = []
 
-        for article_doi in base_article_dois:
+        offset = 0
 
-            offset = 0
+        next = True
 
-            next = True
+        while next:
 
-            while next:
+            inbound_citations_url = "https://api.semanticscholar.org/graph/v1/paper/" + article_doi + "/citations?fields=externalIds&limit=1000&offset=" + str(offset)
+            response = requests.get(inbound_citations_url, headers = {'x-api-key':os.environ.get('S2AG_API_KEY')})
 
-                inbound_citations_url = "https://api.semanticscholar.org/graph/v1/paper/" + article_doi + "/citations?fields=externalIds&limit=1000&offset=" + str(offset)
-                response = requests.get(inbound_citations_url, headers = {'x-api-key':os.environ.get('S2AG_API_KEY')})
+            if response.status_code != 200:
+                continue
 
-                if response.status_code != 200:
+            response_dict = json.loads(response.text)
+
+            inbound_citation_article_batch = response_dict.get('data', None)
+            inbound_citation_article_batch = [inbound_citation_article.get('citingPaper', None) for inbound_citation_article in inbound_citation_article_batch]
+            inbound_citation_article_externalIds_batch = [inbound_citation_article.get('externalIds', None) for inbound_citation_article in inbound_citation_article_batch]
+
+            for inbound_citation_article_externalIds in inbound_citation_article_externalIds_batch:
+
+                if "DOI" not in inbound_citation_article_externalIds.keys():
                     continue
 
-                response_dict = json.loads(response.text)
+                inbound_citation_article_doi = inbound_citation_article_externalIds.get('DOI', None)
 
-                inbound_citation_article_batch = response_dict.get('data', None)
-                inbound_citation_article_batch = [inbound_citation_article.get('citingPaper', None) for inbound_citation_article in inbound_citation_article_batch]
-                inbound_citation_article_externalIds_batch = [inbound_citation_article.get('externalIds', None) for inbound_citation_article in inbound_citation_article_batch]
+                if inbound_citation_article_doi is not None:
+                    inbound_citation_article_dois.append(inbound_citation_article_doi)
 
-                for inbound_citation_article_externalIds in inbound_citation_article_externalIds_batch:
+            is_there_next = response_dict.get('next', None)
 
-                    if "DOI" not in inbound_citation_article_externalIds.keys():
-                        continue
-
-                    inbound_citation_article_doi = inbound_citation_article_externalIds.get('DOI', None)
-
-                    if inbound_citation_article_doi is not None:
-                        inbound_citation_article_dois.append(inbound_citation_article_doi)
-
-                is_there_next = response_dict.get('next', None)
-
-                if is_there_next is not None:
-                    offset += 1000
-                else:
-                    next = False
+            if is_there_next is not None:
+                offset += 1000
+            else:
+                next = False
 
         return inbound_citation_article_dois

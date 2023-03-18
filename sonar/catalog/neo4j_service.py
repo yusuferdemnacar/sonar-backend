@@ -1,11 +1,12 @@
 from typing import List
 from article.schemas import Article
 from author.schemas import Author
+from neo4j_client import Neo4jClient
 
 class CatalogService():
 
-    def __init__(self, neo4j_graph_client):
-        self.neo4j_graph_client = neo4j_graph_client
+    def __init__(self, neo4j_client: Neo4jClient):
+        self.neo4j_client = neo4j_client
 
     def create_base_node(self, username: str, catalog_base_name: str):
             
@@ -15,7 +16,7 @@ class CatalogService():
             MERGE (cb)-[:OWNED_BY]->(u)
         """
 
-        self.neo4j_graph_client.run(query, parameters={"catalog_base_name": catalog_base_name, "username": username})
+        self.neo4j_client.run(query, parameters={"catalog_base_name": catalog_base_name, "username": username})
 
     def delete_base_node(self, username: str, catalog_base_name: str):
 
@@ -24,7 +25,7 @@ class CatalogService():
             DETACH DELETE cb
         """
 
-        self.neo4j_graph_client.run(query, parameters={"catalog_base_name": catalog_base_name, "username": username})
+        self.neo4j_client.run(query, parameters={"catalog_base_name": catalog_base_name, "username": username})
 
     def create_extension_node(self, username: str, catalog_base_name: str, catalog_extension_name: str):
 
@@ -34,54 +35,71 @@ class CatalogService():
             MERGE (ce)-[:EXTENDS]->(cb)
         """
 
-        self.neo4j_graph_client.run(query, parameters={"catalog_base_name": catalog_base_name, "username": username, "catalog_extension_name": catalog_extension_name})
+        self.neo4j_client.run(query, parameters={"catalog_base_name": catalog_base_name, "username": username, "catalog_extension_name": catalog_extension_name})
 
-    def create_article_node(self, article: Article, authors: List[Author] ,inbound_citation_dois: List[str], outbound_citation_dois: List[str]):
+    def create_article_patterns(self, article_bundles):
+
+        for article_bundle in article_bundles:
+            if article_bundle["article"]["doi"] == "10.1038/s41558-021-01203-6":
+                print(article_bundle)
         
-        query = """
-            MERGE (a:Article {doi: $article.doi})
-            SET a.external_ids = $article.external_ids,
-                a.s2ag_url = $article.s2ag_url,
-                a.title = $article.title,
-                a.abstract = $article.abstract,
-                a.venue = $article.venue,
-                a.year = $article.year,
-                a.outbound_citation_count = $article.outbound_citation_count,
-                a.inbound_citation_count = $article.inbound_citation_count,
-                a.s2ag_influential_inbound_citation_count = $article.s2ag_influential_inbound_citation_count,
-                a.is_open_access = $article.is_open_access,
-                a.open_access_pdf_url = $article.open_access_pdf_url,
-                a.fields_of_study = $article.fields_of_study,
-                a.publication_venue = $article.publication_venue,
-                a.publication_types = $article.publication_types,
-                a.publication_date = $article.publication_date,
-                a.journal = $article.journal
-            WITH a, $author_names AS author_names
-            UNWIND author_names AS author_name
-            MATCH (au:Author)
-            WHERE au.name = author_name
-            MERGE (a)-[:AUTHORED_BY]->(au)
-            WITH a, $inbound_citation_dois AS inbound_citation_dois
-            UNWIND inbound_citation_dois AS inbound_citation_doi
-            MATCH (c:Article)
-            WHERE c.doi = inbound_citation_doi
-            MERGE (c)-[:CITES]->(a)
-            WITH a, $outbound_citation_dois AS outbound_citation_dois
-            UNWIND outbound_citation_dois AS outbound_citation_doi
-            MATCH (c:Article)
-            WHERE c.doi = outbound_citation_doi
-            MERGE (a)-[:CITES]->(c)
-
+        article_creation_query = """
+            UNWIND $article_bundles AS article_bundle
+                CREATE (a:Article {doi: article_bundle.article.doi})
+                SET a.external_ids = article_bundle.article.external_ids,
+                    a.s2ag_url = article_bundle.article.s2ag_url,
+                    a.title = article_bundle.article.title,
+                    a.abstract = article_bundle.article.abstract,
+                    a.venue = article_bundle.article.venue,
+                    a.year = article_bundle.article.year,
+                    a.outbound_citation_count = article_bundle.article.outbound_citation_count,
+                    a.inbound_citation_count = article_bundle.article.inbound_citation_count,
+                    a.s2ag_influential_inbound_citation_count = article_bundle.article.s2ag_influential_inbound_citation_count,
+                    a.is_open_access = article_bundle.article.is_open_access,
+                    a.open_access_pdf_url = article_bundle.article.open_access_pdf_url,
+                    a.fields_of_study = article_bundle.article.fields_of_study,
+                    a.publication_venue = article_bundle.article.publication_venue,
+                    a.publication_types = article_bundle.article.publication_types,
+                    a.publication_date = article_bundle.article.publication_date,
+                    a.journal = article_bundle.article.journal
+                WITH a, article_bundle
+                UNWIND article_bundle.inbound_citation_dois AS inbound_citation_doi
+                    MATCH (ic:Article)
+                    WHERE ic.doi = inbound_citation_doi
+                    CREATE (ic)-[:CITES]->(a)
+                WITH a, article_bundle
+                UNWIND article_bundle.outbound_citation_dois AS outbound_citation_doi
+                    MATCH (oc:Article)
+                    WHERE oc.doi = outbound_citation_doi
+                    CREATE (a)-[:CITES]->(oc)
         """
 
-        author_names = [author["name"] for author in authors]
+        author_creation_query = """
+            UNWIND $article_bundles AS article_bundle
+            MATCH (a:Article {doi: article_bundle.article.doi})
+            UNWIND article_bundle.authors AS author
+            MERGE (au:Author {s2ag_id: author.s2ag_id})
+            ON CREATE SET
+                au.name = author.name,
+                au.s2ag_url = author.s2ag_url,
+                au.aliases = author.aliases,
+                au.affiliations = author.affiliations,
+                au.homepage = author.homepage,
+                au.paper_count = author.paper_count,
+                au.citation_count = author.citation_count,
+                au.h_index = author.h_index
+            MERGE (a)-[:AUTHORED_BY]->(au)
+        """
 
-        self.neo4j_graph_client.run(query, parameters={"doi": article["doi"], "article": article, "author_names": author_names, "inbound_citation_dois": inbound_citation_dois, "outbound_citation_dois": outbound_citation_dois})
+        with self.neo4j_client.driver.session().begin_transaction() as tx:
+
+            tx.run(article_creation_query, parameters={"article_bundles": article_bundles})
+            tx.run(author_creation_query, parameters={"article_bundles": article_bundles})
 
     def create_author_node(self, author: Author):
         
         query = """
-            MERGE (a:Author {name: $author_name})
+            MERGE (a:Author {s2ag_id: $author.s2ag_id})
             SET a.name = $author.name,
                 a.s2ag_url = $author.s2ag_url,
                 a.aliases = $author.aliases,
@@ -92,7 +110,7 @@ class CatalogService():
                 a.h_index = $author.h_index
         """
 
-        self.neo4j_graph_client.run(query, parameters={"author_name": author["name"], "author": author})
+        self.neo4j_client.run(query, parameters={"author_name": author["name"], "author": author})
 
     def add_article_to_base(self, username, catalog_base_name, doi):
 
@@ -102,7 +120,7 @@ class CatalogService():
             MERGE (a)-[i:IN]->(cb)
         """
 
-        self.neo4j_graph_client.run(query, parameters={"doi": doi, "catalog_base_name": catalog_base_name, "username": username})
+        self.neo4j_client.run(query, parameters={"doi": doi, "catalog_base_name": catalog_base_name, "username": username})
 
     def add_article_to_extension(self, username, catalog_base_name, catalog_extension_name, doi):
             
@@ -113,7 +131,7 @@ class CatalogService():
                 RETURN a, ce
             """
     
-            self.neo4j_graph_client.run(query, parameters={"doi": doi, "catalog_base_name": catalog_base_name, "catalog_extension_name": catalog_extension_name, "username": username})
+            self.neo4j_client.run(query, parameters={"doi": doi, "catalog_base_name": catalog_base_name, "catalog_extension_name": catalog_extension_name, "username": username})
 
     def remove_article_from_base(self, username, catalog_base_name, doi):
 
@@ -123,7 +141,7 @@ class CatalogService():
             DELETE i
         """
 
-        self.neo4j_graph_client.run(query, parameters={"doi": doi, "catalog_base_name": catalog_base_name, "username": username})
+        self.neo4j_client.run(query, parameters={"doi": doi, "catalog_base_name": catalog_base_name, "username": username})
 
     def get_base_articles(self, username, catalog_base_name) -> List[Article]:
         
@@ -133,7 +151,7 @@ class CatalogService():
             RETURN a AS article
         """
 
-        result = self.neo4j_graph_client.run(query, parameters={"catalog_base_name": catalog_base_name, "username": username})
+        result = self.neo4j_client.run(query, parameters={"catalog_base_name": catalog_base_name, "username": username})
 
         articles = [Article(**record["article"]) for record in result]
 
@@ -147,7 +165,7 @@ class CatalogService():
             RETURN a AS article
         """
 
-        result = self.neo4j_graph_client.run(query, parameters={"catalog_base_name": catalog_base_name, "username": username, "extension_name": extension_name})
+        result = self.neo4j_client.run(query, parameters={"catalog_base_name": catalog_base_name, "username": username, "extension_name": extension_name})
 
         articles = [Article(**record["article"]) for record in result]
 
@@ -161,7 +179,7 @@ class CatalogService():
             RETURN a AS Article
         """.format(catalog_base_name=catalog_base_name, username=username, doi=doi)
 
-        result = self.neo4j_graph_client.run(query, parameters={"catalog_base_name": catalog_base_name, "username": username, "doi": doi})
+        result = self.neo4j_client.run(query, parameters={"catalog_base_name": catalog_base_name, "username": username, "doi": doi})
 
         if len(result) > 0:
             return True
@@ -176,7 +194,7 @@ class CatalogService():
             RETURN c AS CatalogBase
         """
 
-        result = self.neo4j_graph_client.run(query, parameters={"catalog_base_name": catalog_base_name, "username": username})
+        result = self.neo4j_client.run(query, parameters={"catalog_base_name": catalog_base_name, "username": username})
 
         if len(result) != 0:
             return True
@@ -191,7 +209,7 @@ class CatalogService():
             RETURN e AS CatalogExtension
         """
 
-        result = self.neo4j_graph_client.run(query, parameters={"extension_name": extension_name, "base_name": base_name, "username": username})
+        result = self.neo4j_client.run(query, parameters={"extension_name": extension_name, "base_name": base_name, "username": username})
 
         if len(result) != 0:
             return True
@@ -206,7 +224,7 @@ class CatalogService():
             RETURN a AS article
         """
 
-        result = self.neo4j_graph_client.run(query, parameters={"doi_list": list(dois)})
+        result = self.neo4j_client.run(query, parameters={"doi_list": list(dois)})
 
         articles = [Article(**record["article"]) for record in result]
 
@@ -220,7 +238,7 @@ class CatalogService():
             RETURN a AS author
         """
 
-        result = self.neo4j_graph_client.run(query, parameters={"author_name_list": author_name_list})
+        result = self.neo4j_client.run(query, parameters={"author_name_list": author_name_list})
 
         authors = [Author(**record["author"]) for record in result]
 
