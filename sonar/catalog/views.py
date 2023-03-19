@@ -10,10 +10,10 @@ from .serializers import *
 
 from rest_framework.decorators import api_view, permission_classes, authentication_classes
 from rest_framework.permissions import IsAuthenticated, AllowAny
-import requests
 from neo4j_client import Neo4jClient
-from .neo4j_service import CatalogService
+from graph.neo4j_service import CatalogService
 from .s2ag_service import S2AGService
+from graph.models import Citation
 
 class RequestValidator():
 
@@ -145,7 +145,16 @@ class CatalogBaseView(APIView):
 
             if not existing_articles:
 
+                citing_article_dois_queryset = Citation.objects.filter(cited_article_doi=article_doi)
+                citing_article_dois = citing_article_dois_queryset.values_list('citing_article_doi', flat=True)
+
+                Citation.objects.bulk_create([Citation(citing_article_doi=article_doi, cited_article_doi=cited_article_doi) for cited_article_doi in article_result[0]['outbound_citation_dois']])
+
+                article_result[0]['inbound_citation_dois'] = list(citing_article_dois)
+
                 self.catalog_service.create_article_patterns(article_result)
+
+                citing_article_dois_queryset.delete()
 
                 print("create article pattern: ", time.time() - t)
                 t = time.time()
@@ -280,7 +289,7 @@ class CatalogExtensionView(APIView):
         edit_type = request.data.get('edit_type', None)
 
         fields = {
-            'catalog_name': catalog_base_name,
+            'catalog_base_name': catalog_base_name,
             'catalog_extension_name': catalog_extension_name,
             'edit_type': edit_type
         }
@@ -310,6 +319,13 @@ class CatalogExtensionView(APIView):
             print("base_articles: ", time.time() - t)
             t = time.time()
 
+            inbound_citation_count = 0
+            for article in base_articles:
+                inbound_citation_count += article["inbound_citation_count"]
+
+            if inbound_citation_count > 1000:
+                return Response({'error': 'too many inbound citations'}, status=status.HTTP_400_BAD_REQUEST)
+
             base_article_dois = [article["doi"] for article in base_articles]
             inbound_citation_article_dois = set(self.s2ag_service.get_inbound_citation_article_dois(base_article_dois))
             
@@ -331,8 +347,39 @@ class CatalogExtensionView(APIView):
             # split new articles into bundles of 1000
             new_article_bundle_batches = [new_article_bundles[i:i+1000] for i in range(0, len(new_article_bundles), 1000)]
 
+            new_article_outbound_citation_dois = []
+            for new_article_bundle in new_article_bundles:
+                print("citing article: ", new_article_bundle["article"]["doi"], "cited article count: ", len(new_article_bundle["outbound_citation_dois"]))
+                for outbound_citation_doi in new_article_bundle["outbound_citation_dois"]:
+                    new_article_outbound_citation_dois.append(Citation(citing_article_doi=new_article_bundle["article"]["doi"], cited_article_doi=outbound_citation_doi))
+            
+            print("new_article_outbound_citation_dois: ", time.time() - t)
+            t = time.time()
+
+            Citation.objects.bulk_create(new_article_outbound_citation_dois, ignore_conflicts=True)
+
+            print("bulk_create: ", time.time() - t)
+            t = time.time()
+
+            batch = 0
+
             for new_article_bundle_batch in new_article_bundle_batches:
+
+                print("batch: ", batch)
+                batch += 1
+
+                citing_article_dois_queryset = Citation.objects.filter(cited_article_doi__in = [new_article_bundle["article"]["doi"] for new_article_bundle in new_article_bundle_batch])
+                citing_article_dois = {}
+
+                for cited_article_doi in citing_article_dois_queryset.values_list("cited_article_doi", flat=True).distinct():
+                    citing_article_dois[cited_article_doi] = [citing_article_doi for citing_article_doi in citing_article_dois_queryset.filter(cited_article_doi=cited_article_doi).values_list("citing_article_doi", flat=True)]
+                
+                for new_article_bundle in new_article_bundle_batch:
+                    new_article_bundle["inbound_citation_dois"] = citing_article_dois.get(new_article_bundle["article"]["doi"], [])
+
                 self.catalog_service.create_article_patterns(new_article_bundle_batch)
+
+                citing_article_dois_queryset.delete()
 
             print("create_article_patterns: ", time.time() - t)
             t = time.time()
@@ -347,87 +394,81 @@ class CatalogExtensionView(APIView):
             return Response({"info": "s2ag inbound citations added"}, status=status.HTTP_200_OK)
 
         elif edit_type == "add_outbound_s2ag_citations":
-            print("llllolll")
-            paper_doi_list = [article_identifier.DOI for article_identifier in catalog_base.article_identifiers.all()]
+            
+            t = time.time()
+            start = time.time()
 
-            s2ag_outbound_citation_articles = set()
+            base_articles = self.catalog_service.get_base_articles(user.username, catalog_base_name)
 
-            for paper_doi in paper_doi_list:
+            print("base_articles: ", time.time() - t)
+            t = time.time()
 
-                offset = 0
+            outbound_citation_count = 0
+            for article in base_articles:
+                outbound_citation_count += article["outbound_citation_count"]
 
-                next = True
+            if outbound_citation_count > 1000:
+                return Response({'error': 'too many outbound citations'}, status=status.HTTP_400_BAD_REQUEST)
+            
+            base_article_dois = [article["doi"] for article in base_articles]
+            outbound_citation_article_dois = set(self.s2ag_service.get_outbound_citation_article_dois(base_article_dois))
 
-                while next:
-                    print("lay")
-                    s2ag_outbound_citations_lookup_url = "https://api.semanticscholar.org/graph/v1/paper/" + paper_doi + "/references?fields=externalIds,title,abstract,year,citationCount,referenceCount,fieldsOfStudy,publicationTypes,publicationDate,authors&limit=1000&offset=" + str(offset)
-                    s2ag_outbound_citations_lookup_response = requests.get(s2ag_outbound_citations_lookup_url, {'x-api-key':os.environ.get('S2AG_API_KEY')})
+            print("outbound_citation_article_dois: ", time.time() - t)
+            t = time.time()
 
-                    if s2ag_outbound_citations_lookup_response.status_code == 200:
+            existing_articles = self.catalog_service.get_existing_articles(outbound_citation_article_dois)
+            existing_article_dois = [article["doi"] for article in existing_articles]
 
-                        s2ag_outbound_citations_lookup_json = s2ag_outbound_citations_lookup_response.json()
+            print("existing_article_dois: ", time.time() - t)
+            t = time.time()
 
-                        s2ag_paper_citations = s2ag_outbound_citations_lookup_json.get('data', None)
-                        
-                        if s2ag_paper_citations is not None:
+            new_article_dois = outbound_citation_article_dois - set(existing_article_dois)
+            new_article_bundles = self.s2ag_service.get_articles(new_article_dois)
 
-                            for s2ag_paper_citation in s2ag_paper_citations:
+            print("new_articles: ", time.time() - t)
+            t = time.time()
 
-                                s2ag_cited_paper = s2ag_paper_citation.get('citedPaper', None)
+            # split new articles into bundles of 1000
+            new_article_bundle_batches = [new_article_bundles[i:i+1000] for i in range(0, len(new_article_bundles), 1000)]
 
-                                if s2ag_cited_paper is not None:
+            new_article_outbound_citation_dois = []
+            for new_article_bundle in new_article_bundles:
+                print("citing article: ", new_article_bundle["article"]["doi"], "cited article count: ", len(new_article_bundle["outbound_citation_dois"]))
+                for outbound_citation_doi in new_article_bundle["outbound_citation_dois"]:
+                    new_article_outbound_citation_dois.append(Citation(citing_article_doi=new_article_bundle["article"]["doi"], cited_article_doi=outbound_citation_doi))
+            
+            Citation.objects.bulk_create(new_article_outbound_citation_dois)
 
-                                    s2ag_cited_paper_externalIds = s2ag_cited_paper.get('externalIds', None)
+            for new_article_bundle_batch in new_article_bundle_batches:
 
-                                    if s2ag_cited_paper_externalIds is not None:
-                                    
-                                        if "DOI" not in s2ag_cited_paper_externalIds.keys():
-                                            continue
+                citing_article_dois_queryset = Citation.objects.filter(cited_article_doi__in = [new_article_bundle["article"]["doi"] for new_article_bundle in new_article_bundle_batch])
+                print("queryset: ", len(citing_article_dois_queryset))
+                # create a dictionary of citing article dois to cited article dois
 
-                                        s2ag_cited_paper_doi = s2ag_cited_paper_externalIds.get('DOI', None)
+                citing_article_dois = {}
 
-                                        if s2ag_cited_paper_doi is not None:
-                                            s2ag_citing_paper_title = s2ag_cited_paper.get('title', None)
-                                            s2ag_citing_paper_abstract = s2ag_cited_paper.get('abstract', None)
-                                            s2ag_citing_paper_year = s2ag_cited_paper.get('year', None)
-                                            s2ag_citing_paper_citation_count = s2ag_cited_paper.get('citationCount',
-                                                                                                     None)
-                                            s2ag_citing_paper_reference_count = s2ag_cited_paper.get('referenceCount',
-                                                                                                      None)
-                                            s2ag_citing_paper_fields_of_study = s2ag_cited_paper.get('fieldsOfStudy',
-                                                                                                      None)
-                                            s2ag_citing_paper_publication_types = s2ag_cited_paper.get(
-                                                'publicationTypes', None)
-                                            s2ag_citing_paper_publication_date = s2ag_cited_paper.get(
-                                                'publicationDate', None)
-                                            s2ag_citing_paper_authors = s2ag_cited_paper.get('authors', None)
-                                            if s2ag_citing_paper_authors:
-                                                s2ag_citing_paper_authors = [author["name"] for author in s2ag_citing_paper_authors]
+                for cited_article_doi in citing_article_dois_queryset.values_list("cited_article_doi", flat=True).distinct():
+                    citing_article_dois[cited_article_doi] = [citing_article_doi for citing_article_doi in citing_article_dois_queryset.filter(cited_article_doi=cited_article_doi).values_list("citing_article_doi", flat=True)]
 
-                                            s2ag_outbound_citation_articles.add(Article(
-                                                DOI=s2ag_cited_paper_doi,
-                                                title=s2ag_citing_paper_title,
-                                                abstract=s2ag_citing_paper_abstract,
-                                                year=s2ag_citing_paper_year,
-                                                citation_count=s2ag_citing_paper_citation_count,
-                                                reference_count=s2ag_citing_paper_reference_count,
-                                                fields_of_study=s2ag_citing_paper_fields_of_study,
-                                                publication_types=s2ag_citing_paper_publication_types,
-                                                publication_date=s2ag_citing_paper_publication_date,
-                                                authors=s2ag_citing_paper_authors))
+                for new_article_bundle in new_article_bundle_batch:
+                    new_article_bundle["inbound_citation_dois"] = citing_article_dois.get(new_article_bundle["article"]["doi"], [])
+                    print("citing article: ", new_article_bundle["article"]["doi"], "cited articles: ", new_article_bundle["inbound_citation_dois"])
 
+                self.catalog_service.create_article_patterns(new_article_bundle_batch)
 
-                        is_there_next = s2ag_outbound_citations_lookup_json.get('next', None)
+                citing_article_dois_queryset.delete()
 
-                        if is_there_next is not None:
-                            offset += 1000
-                        else:
-                            next = False
+            print("create_article_patterns: ", time.time() - t)
+            t = time.time()
 
-            created = Article.objects.bulk_create(s2ag_outbound_citation_articles, ignore_conflicts=True)
-            catalog_extension.article_identifiers.add(*created)
-            print("heere")
-            return Response({"info": "s2ag outbound citations added", "catalog_extension": CatalogExtensionSerializer(catalog_extension).data}, status=status.HTTP_200_OK)
+            self.catalog_service.add_articles_to_extension(user.username, catalog_base_name, catalog_extension_name, list(outbound_citation_article_dois))
+
+            print("add_article_to_extension: ", time.time() - t)
+            t = time.time()
+
+            print("total: ", time.time() - start)
+
+            return Response({"info": "s2ag outbound citations added"}, status=status.HTTP_200_OK)
 
         elif edit_type == "add_s2ag_paper_id":
             paper_doi = request.data.get('paper_doi', None)

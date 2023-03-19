@@ -4,6 +4,17 @@ from author.schemas import Author
 from catalog.schemas import CatalogBase
 from neo4j_client import Neo4jClient
 
+class UserService():
+
+    def __init__(self, neo4j_graph_client):
+        self.neo4j_graph_client = neo4j_graph_client
+
+    def create_user_node(self, username: str):
+        query = """
+            MERGE (u:User {username: $username})
+        """
+        self.neo4j_graph_client.run(query, parameters={"username": username})
+
 class CatalogService():
 
     def __init__(self, neo4j_client: Neo4jClient):
@@ -64,14 +75,6 @@ class CatalogService():
                 RETURN a
             }
             WITH a, article_bundle
-            CALL {
-                WITH a, article_bundle
-                MATCH (k:Article)-[r:CITES]->(p:PseudoArticle {doi: a.doi})
-                DELETE r
-                DELETE p
-                CREATE (a)-[:CITES]->(k)
-            }
-            WITH a, article_bundle
             CALL{
                 WITH a, article_bundle
                 UNWIND article_bundle.outbound_citation_dois AS outbound_citation_doi
@@ -80,16 +83,18 @@ class CatalogService():
                     MATCH (oc:Article)
                     WHERE oc.doi = outbound_citation_doi
                     MERGE (a)-[:CITES]->(oc)
-                    RETURN oc
                 }
-                RETURN COLLECT(oc) AS oc_list
             }
-            WITH a, [x IN article_bundle.outbound_citation_dois WHERE NOT x IN oc_list] AS non_existent_outbound_citation_dois
+            WITH a, article_bundle
             CALL{
-                WITH a, non_existent_outbound_citation_dois
-                UNWIND non_existent_outbound_citation_dois AS non_existent_outbound_citation_doi
-                MERGE (k:PseudoArticle {doi: non_existent_outbound_citation_doi})
-                MERGE (a)-[:CITES]->(k)
+                WITH a, article_bundle
+                UNWIND article_bundle.inbound_citation_dois AS inbound_citation_doi
+                CALL {
+                    WITH a, inbound_citation_doi
+                    MATCH (ic:Article)
+                    WHERE ic.doi = inbound_citation_doi
+                    MERGE (ic)-[:CITES]->(a)
+                }
             }
 
         """
@@ -143,8 +148,6 @@ class CatalogService():
         self.neo4j_client.run(query, parameters={"doi": doi, "catalog_base_name": catalog_base_name, "username": username})
 
     def add_articles_to_extension(self, username, catalog_base_name, catalog_extension_name, dois):
-
-        print(username, catalog_base_name, catalog_extension_name, dois)
             
         query = """
             UNWIND $dois AS doi

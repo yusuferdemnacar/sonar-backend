@@ -76,7 +76,7 @@ class S2AGService():
 
         article_bundles = []
 
-        with ThreadPool(50) as pool:
+        with ThreadPool(100) as pool:
             article_bundles = pool.map(self.get_article, dois)
 
         return article_bundles
@@ -141,3 +141,67 @@ class S2AGService():
             print(next)
 
         return inbound_citation_article_dois
+    
+    def get_outbound_citation_article_dois(self, article_dois):
+            
+        outbound_citation_article_dois = []
+        outbound_citation_article_dois_lists = []
+
+        with ThreadPool(50) as pool:
+            outbound_citation_article_dois_lists = pool.map(self.get_outbound_citation_article_doi, article_dois)
+
+        for outbound_citation_article_dois_list in outbound_citation_article_dois_lists:
+            outbound_citation_article_dois += outbound_citation_article_dois_list
+
+        return outbound_citation_article_dois
+    
+    def get_outbound_citation_article_doi(self, article_doi):
+
+        outbound_citation_article_dois = []
+
+        offset = 0
+        limit = 1000
+
+        next = True
+
+        while next:
+            
+            outbound_citations_url = "https://api.semanticscholar.org/graph/v1/paper/" + article_doi + "/references?fields=externalIds&limit=" + str(limit) + "&offset=" + str(offset)
+            response = requests.get(outbound_citations_url, headers = {'x-api-key':os.environ.get('S2AG_API_KEY')})
+
+            if response.status_code != 200:
+                if response.text == "{\"error\":\"offset + limit must be < 10000\"}\n":
+                    limit = 999
+                continue
+
+            response_dict = json.loads(response.text)
+
+            outbound_citation_article_batch = response_dict.get('data', None)
+            outbound_citation_article_batch = [outbound_citation_article.get('citedPaper', None) for outbound_citation_article in outbound_citation_article_batch]
+
+            for outbound_citation_article in outbound_citation_article_batch:
+                    
+                if outbound_citation_article is None:
+                    continue
+
+                outbound_citation_article_externalIds = outbound_citation_article.get('externalIds', None)
+
+                if outbound_citation_article_externalIds is None or "DOI" not in outbound_citation_article_externalIds.keys():
+                    print("no DOI")
+                    continue
+
+                outbound_citation_article_doi = outbound_citation_article_externalIds.get('DOI', None)
+
+                print(outbound_citation_article_doi)
+
+                if outbound_citation_article_doi is not None:
+                    outbound_citation_article_dois.append(outbound_citation_article_doi)
+
+            is_there_next = response_dict.get('next', None)
+
+            if is_there_next is not None and is_there_next != 9999:
+                offset += 1000
+            else:
+                next = False
+                
+        return outbound_citation_article_dois
