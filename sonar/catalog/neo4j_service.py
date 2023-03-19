@@ -38,23 +38,11 @@ class CatalogService():
         self.neo4j_client.run(query, parameters={"catalog_base_name": catalog_base_name, "username": username, "catalog_extension_name": catalog_extension_name})
 
     def create_article_patterns(self, article_bundles):
-
-        citation_edges = []
-        
-        for article_bundle in article_bundles:
-
-            article = article_bundle['article']
-            inbound_citations = article_bundle['inbound_citation_dois']
-            outbound_citations = article_bundle['outbound_citation_dois']
-
-            for inbound_citation in inbound_citations:
-                citation_edges.append([inbound_citation, article['doi']])
-            
-            for outbound_citation in outbound_citations:
-                citation_edges.append([article['doi'], outbound_citation])
         
         article_creation_query = """
             UNWIND $article_bundles AS article_bundle
+            CALL{
+                WITH article_bundle
                 CREATE (a:Article {doi: article_bundle.article.doi})
                 SET a.external_ids = article_bundle.article.external_ids,
                     a.s2ag_url = article_bundle.article.s2ag_url,
@@ -72,32 +60,38 @@ class CatalogService():
                     a.publication_types = article_bundle.article.publication_types,
                     a.publication_date = article_bundle.article.publication_date,
                     a.journal = article_bundle.article.journal
-        """
+                RETURN a
+            }
+            WITH a, article_bundle
+            CALL {
+                WITH a, article_bundle
+                MATCH (k:Article)-[r:CITES]->(p:PseudoArticle {doi: a.doi})
+                DELETE r
+                DELETE p
+                CREATE (a)-[:CITES]->(k)
+            }
+            WITH a, article_bundle
+            CALL{
+                WITH a, article_bundle
+                UNWIND article_bundle.outbound_citation_dois AS outbound_citation_doi
+                CALL {
+                    WITH a, outbound_citation_doi
+                    MATCH (oc:Article)
+                    WHERE oc.doi = outbound_citation_doi
+                    MERGE (a)-[:CITES]->(oc)
+                    RETURN oc
+                }
+                RETURN COLLECT(oc) AS oc_list
+            }
+            WITH a, [x IN article_bundle.outbound_citation_dois WHERE NOT x IN oc_list] AS non_existent_outbound_citation_dois
+            CALL{
+                WITH a, non_existent_outbound_citation_dois
+                UNWIND non_existent_outbound_citation_dois AS non_existent_outbound_citation_doi
+                MERGE (k:PseudoArticle {doi: non_existent_outbound_citation_doi})
+                MERGE (a)-[:CITES]->(k)
+            }
 
-        inbound_citation_creation_query = """
-            UNWIND $article_bundles AS article_bundle
-            MATCH (a:Article {doi: article_bundle.article.doi})
-            WITH a, article_bundle.inbound_citations
-            UNWIND article_bundle.inbound_citations AS inbound_citation
-            MATCH (ic:Article {doi: inbound_citation.doi})
-            MERGE (ic)-[:CITES]->(ic)
         """
-
-        outbound_citation_creation_query = """
-            UNWIND $article_bundles AS article_bundle
-            MATCH (a:Article {doi: article_bundle.article.doi})
-            UNWIND article_bundle.outbound_citations AS outbound_citation
-            MATCH (oc:Article {doi: outbound_citation.doi})
-            MERGE (a)-[:CITES]->(oc)
-        """
-
-        citation_creation_query = """
-            UNWIND $citation_edges AS citation_edge
-            MATCH (a:Article {doi: citation_edge[0]})
-            MATCH (b:Article {doi: citation_edge[1]})
-            MERGE (a)-[:CITES]->(b)
-        """
-
 
         author_creation_query = """
             UNWIND $article_bundles AS article_bundle
@@ -119,7 +113,6 @@ class CatalogService():
         with self.neo4j_client.driver.session().begin_transaction() as tx:
 
             tx.run(article_creation_query, parameters={"article_bundles": article_bundles})
-            tx.run(citation_creation_query, parameters={"citation_edges": citation_edges})
             tx.run(author_creation_query, parameters={"article_bundles": article_bundles})
 
     def create_author_node(self, author: Author):
@@ -148,16 +141,18 @@ class CatalogService():
 
         self.neo4j_client.run(query, parameters={"doi": doi, "catalog_base_name": catalog_base_name, "username": username})
 
-    def add_article_to_extension(self, username, catalog_base_name, catalog_extension_name, doi):
+    def add_articles_to_extension(self, username, catalog_base_name, catalog_extension_name, dois):
+
+        print(username, catalog_base_name, catalog_extension_name, dois)
             
-            query = """
-                MATCH (ce:CatalogExtension)-[e:EXTENDS]->(cb:CatalogBase)-[o:OWNED_BY]->(u:User), (a:Article)
-                WHERE ce.name = $catalog_extension_name AND cb.name = $catalog_base_name AND u.username = $username AND a.doi = $doi
-                MERGE (a)-[i:IN]->(ce)
-                RETURN a, ce
-            """
-    
-            self.neo4j_client.run(query, parameters={"doi": doi, "catalog_base_name": catalog_base_name, "catalog_extension_name": catalog_extension_name, "username": username})
+        query = """
+            UNWIND $dois AS doi
+            MATCH (a:Article), (ce:CatalogExtension)-[e:EXTENDS]->(cb:CatalogBase)-[o:OWNED_BY]->(u:User)
+            WHERE a.doi = doi AND cb.name = $catalog_base_name AND ce.name = $catalog_extension_name AND u.username = $username
+            MERGE (a)-[i:IN]->(ce)
+        """
+
+        self.neo4j_client.run(query, parameters={"dois": dois, "catalog_base_name": catalog_base_name, "catalog_extension_name": catalog_extension_name, "username": username})
 
     def remove_article_from_base(self, username, catalog_base_name, doi):
 

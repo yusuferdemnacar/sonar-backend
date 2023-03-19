@@ -62,10 +62,9 @@ class S2AGService():
                 citation_count=author_dict["citationCount"],
                 h_index=author_dict["hIndex"]
             ) for author_dict in response_dict["authors"] if author_dict.get("authorId") is not None]
-            inbound_citation_dois = [citation["externalIds"]["DOI"] for citation in response_dict["citations"] if (citation.get("paperId") is not None and citation.get("externalIds") is not None and "DOI" in citation["externalIds"].keys())]
             outbound_citation_dois = [reference["externalIds"]["DOI"] for reference in response_dict["references"] if (reference.get("paperId") is not None and reference.get("externalIds") is not None and "DOI" in reference["externalIds"].keys())]
 
-            article_bundle = {"article": Article(**article_dict), "authors": authors, "inbound_citation_dois": inbound_citation_dois, "outbound_citation_dois": outbound_citation_dois}
+            article_bundle = {"article": Article(**article_dict), "authors": authors, "outbound_citation_dois": outbound_citation_dois}
 
             return article_bundle
 
@@ -100,15 +99,20 @@ class S2AGService():
         inbound_citation_article_dois = []
 
         offset = 0
+        limit = 1000
 
         next = True
 
         while next:
 
-            inbound_citations_url = "https://api.semanticscholar.org/graph/v1/paper/" + article_doi + "/citations?fields=externalIds&limit=1000&offset=" + str(offset)
+            print(offset, limit)
+
+            inbound_citations_url = "https://api.semanticscholar.org/graph/v1/paper/" + article_doi + "/citations?fields=externalIds&limit=" + str(limit) + "&offset=" + str(offset)
             response = requests.get(inbound_citations_url, headers = {'x-api-key':os.environ.get('S2AG_API_KEY')})
 
             if response.status_code != 200:
+                if response.text == "{\"error\":\"offset + limit must be < 10000\"}\n":
+                    limit = 999
                 continue
 
             response_dict = json.loads(response.text)
@@ -119,7 +123,7 @@ class S2AGService():
 
             for inbound_citation_article_externalIds in inbound_citation_article_externalIds_batch:
 
-                if "DOI" not in inbound_citation_article_externalIds.keys():
+                if inbound_citation_article_externalIds is None or "DOI" not in inbound_citation_article_externalIds.keys():
                     continue
 
                 inbound_citation_article_doi = inbound_citation_article_externalIds.get('DOI', None)
@@ -129,9 +133,11 @@ class S2AGService():
 
             is_there_next = response_dict.get('next', None)
 
-            if is_there_next is not None:
+            if is_there_next is not None and is_there_next != 9999:
                 offset += 1000
             else:
                 next = False
+
+            print(next)
 
         return inbound_citation_article_dois

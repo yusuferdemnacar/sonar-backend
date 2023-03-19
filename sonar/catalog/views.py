@@ -113,7 +113,8 @@ class CatalogBaseView(APIView):
                 return validation_result
             
             t = time.time()
-            
+            start = time.time()
+
             article_in_base = self.catalog_service.check_if_article_in_base(user.username, catalog_base_name, article_doi)
 
             print("article in base: ", time.time() - t)
@@ -153,6 +154,8 @@ class CatalogBaseView(APIView):
 
             print("add article to base: ", time.time() - t)
             t = time.time()
+
+            print("total: ", time.time() - start)
 
             return Response({"info": "article with doi: " + article_doi + " added to catalog base: " + catalog_base_name}, status=status.HTTP_200_OK)
 
@@ -300,6 +303,7 @@ class CatalogExtensionView(APIView):
         if edit_type == "add_inbound_s2ag_citations":
 
             t = time.time()
+            start = time.time()
 
             base_articles = self.catalog_service.get_base_articles(user.username, catalog_base_name)
 
@@ -324,16 +328,21 @@ class CatalogExtensionView(APIView):
             print("new_articles: ", time.time() - t)
             t = time.time()
 
-            self.catalog_service.create_article_patterns(new_article_bundles)
+            # split new articles into bundles of 1000
+            new_article_bundle_batches = [new_article_bundles[i:i+1000] for i in range(0, len(new_article_bundles), 1000)]
+
+            for new_article_bundle_batch in new_article_bundle_batches:
+                self.catalog_service.create_article_patterns(new_article_bundle_batch)
 
             print("create_article_patterns: ", time.time() - t)
             t = time.time()
             
-            for article_doi in inbound_citation_article_dois:
-                self.catalog_service.add_article_to_extension(user.username, catalog_base_name, catalog_extension_name, article_doi)
+            self.catalog_service.add_articles_to_extension(user.username, catalog_base_name, catalog_extension_name, list(inbound_citation_article_dois))
 
             print("add_article_to_extension: ", time.time() - t)
             t = time.time()
+
+            print("total: ", time.time() - start)
 
             return Response({"info": "s2ag inbound citations added"}, status=status.HTTP_200_OK)
 
