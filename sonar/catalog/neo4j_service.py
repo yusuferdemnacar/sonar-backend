@@ -39,9 +39,19 @@ class CatalogService():
 
     def create_article_patterns(self, article_bundles):
 
+        citation_edges = []
+        
         for article_bundle in article_bundles:
-            if article_bundle["article"]["doi"] == "10.1038/s41558-021-01203-6":
-                print(article_bundle)
+
+            article = article_bundle['article']
+            inbound_citations = article_bundle['inbound_citation_dois']
+            outbound_citations = article_bundle['outbound_citation_dois']
+
+            for inbound_citation in inbound_citations:
+                citation_edges.append([inbound_citation, article['doi']])
+            
+            for outbound_citation in outbound_citations:
+                citation_edges.append([article['doi'], outbound_citation])
         
         article_creation_query = """
             UNWIND $article_bundles AS article_bundle
@@ -62,17 +72,32 @@ class CatalogService():
                     a.publication_types = article_bundle.article.publication_types,
                     a.publication_date = article_bundle.article.publication_date,
                     a.journal = article_bundle.article.journal
-                WITH a, article_bundle
-                UNWIND article_bundle.inbound_citation_dois AS inbound_citation_doi
-                    MATCH (ic:Article)
-                    WHERE ic.doi = inbound_citation_doi
-                    CREATE (ic)-[:CITES]->(a)
-                WITH a, article_bundle
-                UNWIND article_bundle.outbound_citation_dois AS outbound_citation_doi
-                    MATCH (oc:Article)
-                    WHERE oc.doi = outbound_citation_doi
-                    CREATE (a)-[:CITES]->(oc)
         """
+
+        inbound_citation_creation_query = """
+            UNWIND $article_bundles AS article_bundle
+            MATCH (a:Article {doi: article_bundle.article.doi})
+            WITH a, article_bundle.inbound_citations
+            UNWIND article_bundle.inbound_citations AS inbound_citation
+            MATCH (ic:Article {doi: inbound_citation.doi})
+            MERGE (ic)-[:CITES]->(ic)
+        """
+
+        outbound_citation_creation_query = """
+            UNWIND $article_bundles AS article_bundle
+            MATCH (a:Article {doi: article_bundle.article.doi})
+            UNWIND article_bundle.outbound_citations AS outbound_citation
+            MATCH (oc:Article {doi: outbound_citation.doi})
+            MERGE (a)-[:CITES]->(oc)
+        """
+
+        citation_creation_query = """
+            UNWIND $citation_edges AS citation_edge
+            MATCH (a:Article {doi: citation_edge[0]})
+            MATCH (b:Article {doi: citation_edge[1]})
+            MERGE (a)-[:CITES]->(b)
+        """
+
 
         author_creation_query = """
             UNWIND $article_bundles AS article_bundle
@@ -94,6 +119,7 @@ class CatalogService():
         with self.neo4j_client.driver.session().begin_transaction() as tx:
 
             tx.run(article_creation_query, parameters={"article_bundles": article_bundles})
+            tx.run(citation_creation_query, parameters={"citation_edges": citation_edges})
             tx.run(author_creation_query, parameters={"article_bundles": article_bundles})
 
     def create_author_node(self, author: Author):
