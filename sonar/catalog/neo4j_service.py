@@ -1,6 +1,7 @@
 from typing import List
 from article.schemas import Article
 from author.schemas import Author
+from catalog.schemas import CatalogBase
 from neo4j_client import Neo4jClient
 
 class CatalogService():
@@ -164,7 +165,7 @@ class CatalogService():
 
         self.neo4j_client.run(query, parameters={"doi": doi, "catalog_base_name": catalog_base_name, "username": username})
 
-    def get_base_articles(self, username, catalog_base_name) -> List[Article]:
+    def get_base_articles(self, username, catalog_base_name, ) -> List[Article]:
         
         query = """
             MATCH (a:Article)-[i:IN]->(c:CatalogBase)-[o:OWNED_BY]->(u:User)
@@ -177,6 +178,37 @@ class CatalogService():
         articles = [Article(**record["article"]) for record in result]
 
         return articles
+
+    def get_base_articles_with_pagination(self, username, catalog_base_name, offset, limit) -> List[Article]:
+
+        query = """
+            MATCH (a:Article)-[i:IN]->(c:CatalogBase)-[o:OWNED_BY]->(u:User)
+            WHERE c.name = $catalog_base_name AND u.username = $username
+            RETURN a AS article
+            ORDER BY a.doi
+            SKIP $offset
+            LIMIT $limit
+        """
+
+        result = self.neo4j_client.run(query, parameters={"catalog_base_name": catalog_base_name, "username": username, "offset": offset, "limit": limit})
+
+        articles = [Article(**record["article"]) for record in result]
+
+        return articles
+
+    def get_base_articles_count(self, username, catalog_base_name) -> int:
+
+        query = """
+            MATCH (a:Article)-[i:IN]->(c:CatalogBase)-[o:OWNED_BY]->(u:User)
+            WHERE c.name = $catalog_base_name AND u.username = $username
+            RETURN count(a) AS article_count
+        """
+
+        result = self.neo4j_client.run(query, parameters={"catalog_base_name": catalog_base_name, "username": username})
+
+        count = int(result["article_count"])
+
+        return count
     
     def get_extension_articles(self, username, catalog_base_name, extension_name) -> List[Article]:
 
@@ -191,7 +223,40 @@ class CatalogService():
         articles = [Article(**record["article"]) for record in result]
 
         return articles
-    
+
+    def get_extension_articles_with_pagination(self, username, catalog_base_name, extension_name, offset, limit) -> List[Article]:
+
+
+        query = """
+            MATCH (a:Article)-[i:IN]->(c:CatalogExtension)-[e:EXTENDS]->(cb:CatalogBase)-[o:OWNED_BY]->(u:User)
+            WHERE cb.name = $catalog_base_name AND u.username = $username AND c.name = $extension_name
+            RETURN a AS article
+            ORDER BY a.doi
+            SKIP $offset
+            LIMIT $limit
+        """
+
+        result = self.neo4j_client.run(query, parameters={"catalog_base_name": catalog_base_name,"extension_name":extension_name ,"username": username, "offset": offset, "limit": limit})
+
+        articles = [Article(**record["article"]) for record in result]
+
+        return articles
+
+    def get_base_articles_count(self, username, catalog_base_name, extension_name) -> int:
+
+        query = """
+            MATCH (a:Article)-[i:IN]->(c:CatalogExtension)-[e:EXTENDS]->(cb:CatalogBase)-[o:OWNED_BY]->(u:User)
+            WHERE cb.name = $catalog_base_name AND u.username = $username AND c.name = $extension_name
+            RETURN count(a) AS article_count
+        """
+
+        result = self.neo4j_client.run(query, parameters={"catalog_base_name": catalog_base_name, "extension_name": extension_name,"username": username})
+
+        count = int(result["article_count"])
+
+        return count
+
+
     def check_if_article_in_base(self, username, catalog_base_name, doi) -> bool:
         
         query = """
@@ -264,3 +329,19 @@ class CatalogService():
         authors = [Author(**record["author"]) for record in result]
 
         return authors
+
+    def get_all_catalog_bases_of_user(self, username) -> List[CatalogBase]:
+
+        query = """
+            MATCH(c:CatalogBase) - [o: OWNED_BY]->(u:User)
+            WHERE u.username = $username
+            OPTIONAL MATCH (a:Article) - [i:IN] -> (c)
+            RETURN c.name AS catalog_base, count(a) as article_count
+        """
+
+
+        result = self.neo4j_client.run(query, parameters={"username": username})
+
+        catalog_bases = [{"catalog_base":record['catalog_base'],"article_count":record['article_count']} for record in result]
+
+        return catalog_bases

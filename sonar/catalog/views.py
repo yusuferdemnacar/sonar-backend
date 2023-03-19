@@ -52,7 +52,7 @@ class CatalogBaseView(APIView):
         if not catalog_base_exists:
             return Response({'error': 'catalog base not found'}, status=status.HTTP_404_NOT_FOUND)
         
-        catalog_base_articles = self.catalog_service.get_base_articles(user.username, catalog_base_name)
+        catalog_base_articles = [article['doi'] for article in self.catalog_service.get_base_articles(user.username, catalog_base_name)]
         return Response(catalog_base_articles, status=status.HTTP_200_OK)
 
     def post(self, request):
@@ -239,7 +239,7 @@ class CatalogExtensionView(APIView):
         if not catalog_extension_exists:
             return Response({'error': 'catalog extension not found'}, status=status.HTTP_404_NOT_FOUND)
 
-        catalog_extension_articles = self.catalog_service.get_extension_articles(user.username, catalog_base_name, catalog_extension_name)
+        catalog_extension_articles = [article['doi'] for article in self.catalog_service.get_extension_articles(user.username, catalog_base_name, catalog_extension_name)]
         return Response(catalog_extension_articles, status=status.HTTP_200_OK)
 
     def post(self, request):
@@ -532,10 +532,11 @@ class CatalogExtensionView(APIView):
 @permission_classes([IsAuthenticated])
 def get_all_catalog_bases(request):
     user = request.user
-    catalog_bases = CatalogBase.objects.filter(owner = user)
+    neo4j_client = Neo4jClient()
+    catalog_service = CatalogService(neo4j_client)
+    catalog_bases = catalog_service.get_all_catalog_bases_of_user(user.username)
 
-    catalog_bases_serialized = CatalogBaseSerializer(catalog_bases, many=True)
-    return Response(catalog_bases_serialized.data, status=status.HTTP_200_OK)
+    return Response(catalog_bases, status=status.HTTP_200_OK)
 
 @api_view(['GET',])
 @permission_classes([IsAuthenticated])
@@ -558,36 +559,39 @@ def get_catalog_extensions(request):
 @api_view(['GET',])
 @permission_classes([IsAuthenticated])
 def get_catalog_extension_articles(request):
-    user = request.user
-    catalog_name = request.query_params.get('catalog_name', None)
-    catalog_extension_name = request.query_params.get('catalog_extension_name', None)
+    request_validator = RequestValidator()
+    neo4j_client = Neo4jClient()
+    catalog_service = CatalogService(neo4j_client)
 
+    user = request.user
+    catalog_base_name = request.query_params.get('catalog_base_name', None)
+    catalog_extension_name = request.query_params.get('catalog_extension_name', None)
+    offset = int(request.GET.get('offset', None))
     fields = {
-        'catalog_name': catalog_name,
-        'catalog_extension_name': catalog_extension_name,
+        'catalog_name': catalog_base_name
     }
 
+    validation_result = request_validator.validate(fields)
 
-    catalog_base = CatalogBase.objects.filter(owner=user, catalog_name=catalog_name).first()
+    if validation_result:
+        return validation_result
 
-    if not catalog_base:
+    catalog_base_exists = catalog_service.check_if_base_exists(user.username, catalog_base_name)
+
+    if not catalog_base_exists:
         return Response({'error': 'catalog base not found'}, status=status.HTTP_404_NOT_FOUND)
 
-    catalog_extension = catalog_base.catalog_extensions.filter(catalog_extension_name=catalog_extension_name).first()
+    catalog_extension_exists = catalog_service.check_if_extension_exists(user.username, catalog_base_name, catalog_extension_name)
 
-    if not catalog_extension:
+    if not catalog_extension_exists:
         return Response({'error': 'catalog extension not found'}, status=status.HTTP_404_NOT_FOUND)
 
-    offset = int(request.GET.get('offset', None))
-    article_count = catalog_extension.article_identifiers.count()
-    articles = catalog_extension.article_identifiers.all()[((offset-1)*25):((offset)*25)]
-
-    serialized_data = ArticleSerializer(articles, many=True)
-    articles = serialized_data.data
+    catalog_extension_articles_count = catalog_service.get_base_articles_count(user.username, catalog_base_name)
+    catalog_extension_articles = catalog_service.get_extension_articles_with_pagination(user.username, catalog_base_name, catalog_extension_name, (offset - 1) * 25, (offset) * 25)
     data = {
-        'articles': articles,
-        'total_count':article_count,
-        'page_count':math.ceil(article_count/25)
+    'articles': catalog_extension_articles,
+    'total_count': catalog_extension_articles_count,
+    'page_count': math.ceil(catalog_extension_articles_count / 25)
     }
 
     return Response(data, status=status.HTTP_200_OK)
@@ -613,29 +617,32 @@ def get_catalog_extension_names(request):
 @api_view(['GET',])
 @permission_classes([IsAuthenticated])
 def get_catalog_base_articles(request):
+    request_validator = RequestValidator()
+    neo4j_client = Neo4jClient()
+    catalog_service = CatalogService(neo4j_client)
 
     user = request.user
-    catalog_name = request.query_params.get('catalog_name', None)
+    catalog_base_name = request.query_params.get('catalog_base_name', None)
     offset = int(request.GET.get('offset', None))
     fields = {
-        'catalog_name': catalog_name
+        'catalog_name': catalog_base_name
     }
 
+    validation_result = request_validator.validate(fields)
 
-    catalog_base = CatalogBase.objects.filter(owner=user, catalog_name=catalog_name).first()
+    if validation_result:
+        return validation_result
 
-    if not catalog_base:
+    catalog_base_exists = catalog_service.check_if_base_exists(user.username, catalog_base_name)
+
+    if not catalog_base_exists:
         return Response({'error': 'catalog base not found'}, status=status.HTTP_404_NOT_FOUND)
-
-    article_count = catalog_base.article_identifiers.count()
-    articles = catalog_base.article_identifiers.all()[((offset - 1) * 25):((offset) * 25)]
-
-    serialized_data = ArticleSerializer(articles, many=True)
-    articles = serialized_data.data
+    catalog_base_articles_count = catalog_service.get_base_articles_count(user.username, catalog_base_name)
+    catalog_base_articles = catalog_service.get_base_articles_with_pagination(user.username, catalog_base_name, (offset - 1) * 25, (offset) * 25)
     data = {
-    'articles': articles,
-    'total_count': article_count,
-    'page_count': math.ceil(article_count / 25)
+    'articles': catalog_base_articles,
+    'total_count': catalog_base_articles_count,
+    'page_count': math.ceil(catalog_base_articles_count / 25)
     }
 
     return Response(data, status=status.HTTP_200_OK)
