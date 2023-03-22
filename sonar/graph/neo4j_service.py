@@ -39,6 +39,15 @@ class CatalogService():
 
         self.neo4j_client.run(query, parameters={"catalog_base_name": catalog_base_name, "username": username})
 
+    def delete_extension_node(self, username: str, catalog_base_name: str, catalog_extension_name: str):
+
+        query = """
+            MATCH (ce:CatalogExtension {name: $catalog_extension_name})-[:EXTENDS]->(cb:CatalogBase {name: $catalog_base_name})-[:OWNED_BY]->(u:User {username: $username})
+            DETACH DELETE ce
+        """
+
+        self.neo4j_client.run(query, parameters={"catalog_extension_name": catalog_extension_name, "username": username})
+
     def create_extension_node(self, username: str, catalog_base_name: str, catalog_extension_name: str):
 
         query = """
@@ -137,15 +146,16 @@ class CatalogService():
 
         self.neo4j_client.run(query, parameters={"author_name": author["name"], "author": author})
 
-    def add_article_to_base(self, username, catalog_base_name, doi):
+    def add_articles_to_base(self, username, catalog_base_name, dois):
 
         query = """
+            UNWIND $dois AS doi
             MATCH (a:Article), (cb:CatalogBase)-[o:OWNED_BY]->(u:User)
             WHERE a.doi = $doi AND cb.name = $catalog_base_name AND u.username = $username
             MERGE (a)-[i:IN]->(cb)
         """
 
-        self.neo4j_client.run(query, parameters={"doi": doi, "catalog_base_name": catalog_base_name, "username": username})
+        self.neo4j_client.run(query, parameters={"dois": dois, "catalog_base_name": catalog_base_name, "username": username})
 
     def add_articles_to_extension(self, username, catalog_base_name, catalog_extension_name, dois):
             
@@ -167,6 +177,16 @@ class CatalogService():
         """
 
         self.neo4j_client.run(query, parameters={"doi": doi, "catalog_base_name": catalog_base_name, "username": username})
+
+    def remove_article_from_extension(self, username, catalog_base_name, catalog_extension_name, doi):
+
+        query = """
+            MATCH (a:Article)-[i:IN]->(ce:CatalogExtension)-[e:EXTENDS]->(cb:CatalogBase)-[o:OWNED_BY]->(u:User)
+            WHERE a.doi = $doi AND cb.name = $catalog_base_name AND ce.name = $catalog_extension_name AND u.username = $username
+            DELETE i
+        """
+
+        self.neo4j_client.run(query, parameters={"doi": doi, "catalog_base_name": catalog_base_name, "catalog_extension_name": catalog_extension_name, "username": username})
 
     def get_base_articles(self, username, catalog_base_name, ) -> List[Article]:
         
@@ -275,6 +295,21 @@ class CatalogService():
         else:
             return False
         
+    def check_if_article_in_extension(self, username, catalog_base_name, extension_name, doi) -> bool:
+
+        query = """
+            MATCH (a:Article)-[i:IN]->(c:CatalogExtension)-[e:EXTENDS]->(cb:CatalogBase)-[o:OWNED_BY]->(u:User)
+            WHERE cb.name = $catalog_base_name AND u.username = $username AND c.name = $extension_name AND a.doi = $doi
+            RETURN a AS Article
+        """.format(catalog_base_name=catalog_base_name, username=username, doi=doi)
+
+        result = self.neo4j_client.run(query, parameters={"catalog_base_name": catalog_base_name, "username": username, "extension_name": extension_name, "doi": doi})
+
+        if len(result) > 0:
+            return True
+        else:
+            return False
+
     def check_if_base_exists(self, username, catalog_base_name) -> bool:
         
         query = """

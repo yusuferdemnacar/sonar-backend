@@ -124,19 +124,8 @@ class CatalogBaseView(APIView):
 
                 return Response({'error': 'article_doi: ' + article_doi + ' already in catalog base: ' + catalog_base_name}, status=status.HTTP_400_BAD_REQUEST)
 
-            article_result = self.s2ag_service.get_articles([article_doi])
-
             print("get articles: ", time.time() - t)
             t = time.time()
-
-            if type(article_result) is int:
-                return Response({'error': 'Error while getting article from external source'}, status=status.HTTP_502_BAD_GATEWAY)
-
-            # article
-            # authors
-            # inbound_citations
-            # outbound_citations
-            # authored_by
             
             existing_articles = self.catalog_service.get_existing_articles([article_doi])
 
@@ -145,21 +134,17 @@ class CatalogBaseView(APIView):
 
             if not existing_articles:
 
-                citing_article_dois_queryset = Citation.objects.filter(cited_article_doi=article_doi)
-                citing_article_dois = citing_article_dois_queryset.values_list('citing_article_doi', flat=True)
+                article_result = self.s2ag_service.get_articles([article_doi])
 
-                Citation.objects.bulk_create([Citation(citing_article_doi=article_doi, cited_article_doi=cited_article_doi) for cited_article_doi in article_result[0]['outbound_citation_dois']])
-
-                article_result[0]['inbound_citation_dois'] = list(citing_article_dois)
+                if type(article_result) is int:
+                    return Response({'error': 'Error while getting article from external source'}, status=status.HTTP_502_BAD_GATEWAY)
 
                 self.catalog_service.create_article_patterns(article_result)
-
-                citing_article_dois_queryset.delete()
 
                 print("create article pattern: ", time.time() - t)
                 t = time.time()
             
-            self.catalog_service.add_article_to_base(user.username, catalog_base_name, article_doi)
+            self.catalog_service.add_articles_to_base(user.username, catalog_base_name, [article_doi])
 
             print("add article to base: ", time.time() - t)
             t = time.time()
@@ -347,18 +332,7 @@ class CatalogExtensionView(APIView):
             # split new articles into bundles of 1000
             new_article_bundle_batches = [new_article_bundles[i:i+1000] for i in range(0, len(new_article_bundles), 1000)]
 
-            new_article_outbound_citation_dois = []
-            for new_article_bundle in new_article_bundles:
-                print("citing article: ", new_article_bundle["article"]["doi"], "cited article count: ", len(new_article_bundle["outbound_citation_dois"]))
-                for outbound_citation_doi in new_article_bundle["outbound_citation_dois"]:
-                    new_article_outbound_citation_dois.append(Citation(citing_article_doi=new_article_bundle["article"]["doi"], cited_article_doi=outbound_citation_doi))
-            
             print("new_article_outbound_citation_dois: ", time.time() - t)
-            t = time.time()
-
-            Citation.objects.bulk_create(new_article_outbound_citation_dois, ignore_conflicts=True)
-
-            print("bulk_create: ", time.time() - t)
             t = time.time()
 
             batch = 0
@@ -368,18 +342,7 @@ class CatalogExtensionView(APIView):
                 print("batch: ", batch)
                 batch += 1
 
-                citing_article_dois_queryset = Citation.objects.filter(cited_article_doi__in = [new_article_bundle["article"]["doi"] for new_article_bundle in new_article_bundle_batch])
-                citing_article_dois = {}
-
-                for cited_article_doi in citing_article_dois_queryset.values_list("cited_article_doi", flat=True).distinct():
-                    citing_article_dois[cited_article_doi] = [citing_article_doi for citing_article_doi in citing_article_dois_queryset.filter(cited_article_doi=cited_article_doi).values_list("citing_article_doi", flat=True)]
-                
-                for new_article_bundle in new_article_bundle_batch:
-                    new_article_bundle["inbound_citation_dois"] = citing_article_dois.get(new_article_bundle["article"]["doi"], [])
-
                 self.catalog_service.create_article_patterns(new_article_bundle_batch)
-
-                citing_article_dois_queryset.delete()
 
             print("create_article_patterns: ", time.time() - t)
             t = time.time()
@@ -431,32 +394,12 @@ class CatalogExtensionView(APIView):
             # split new articles into bundles of 1000
             new_article_bundle_batches = [new_article_bundles[i:i+1000] for i in range(0, len(new_article_bundles), 1000)]
 
-            new_article_outbound_citation_dois = []
-            for new_article_bundle in new_article_bundles:
-                print("citing article: ", new_article_bundle["article"]["doi"], "cited article count: ", len(new_article_bundle["outbound_citation_dois"]))
-                for outbound_citation_doi in new_article_bundle["outbound_citation_dois"]:
-                    new_article_outbound_citation_dois.append(Citation(citing_article_doi=new_article_bundle["article"]["doi"], cited_article_doi=outbound_citation_doi))
-            
-            Citation.objects.bulk_create(new_article_outbound_citation_dois)
-
             for new_article_bundle_batch in new_article_bundle_batches:
 
-                citing_article_dois_queryset = Citation.objects.filter(cited_article_doi__in = [new_article_bundle["article"]["doi"] for new_article_bundle in new_article_bundle_batch])
-                print("queryset: ", len(citing_article_dois_queryset))
-                # create a dictionary of citing article dois to cited article dois
-
-                citing_article_dois = {}
-
-                for cited_article_doi in citing_article_dois_queryset.values_list("cited_article_doi", flat=True).distinct():
-                    citing_article_dois[cited_article_doi] = [citing_article_doi for citing_article_doi in citing_article_dois_queryset.filter(cited_article_doi=cited_article_doi).values_list("citing_article_doi", flat=True)]
-
-                for new_article_bundle in new_article_bundle_batch:
-                    new_article_bundle["inbound_citation_dois"] = citing_article_dois.get(new_article_bundle["article"]["doi"], [])
-                    print("citing article: ", new_article_bundle["article"]["doi"], "cited articles: ", new_article_bundle["inbound_citation_dois"])
+                print("batch: ", batch)
+                batch += 1
 
                 self.catalog_service.create_article_patterns(new_article_bundle_batch)
-
-                citing_article_dois_queryset.delete()
 
             print("create_article_patterns: ", time.time() - t)
             t = time.time()
@@ -471,82 +414,76 @@ class CatalogExtensionView(APIView):
             return Response({"info": "s2ag outbound citations added"}, status=status.HTTP_200_OK)
 
         elif edit_type == "add_s2ag_paper_id":
-            paper_doi = request.data.get('paper_doi', None)
-            title = request.data.get('title', None)
-            abstract = request.data.get('abstract', None)
-            year = request.data.get('year', None)
-            citation_count = request.data.get('citation_count', None)
-            reference_count = request.data.get('reference_count', None)
-            fields_of_study = request.data.get('fields_of_study', None)
-            publication_types = request.data.get('publication_types', None)
-            publication_date = request.data.get('publication_date', None)
-            authors = request.data.get('authors', None)
 
+            # TODO: this is old code, need to update to new pattern
+
+            # this part is very similar to adding a single paper to a catalog base
+
+            article_doi = request.data.get('article_doi', None)
+            
             fields = {
-                'paper_doi': paper_doi
+                'article_doi': article_doi
             }
 
             validation_result = self.request_validator.validate(fields)
 
             if validation_result:
                 return validation_result
+            
+            article_in_extension = self.catalog_service.check_if_article_in_extension(user.username, catalog_base_name, catalog_extension_name, article_doi)
 
-            article, _ = Article.objects.get_or_create(DOI=paper_doi)
+            if article_in_extension:
+                return Response({'error': 'article already in extension'}, status=status.HTTP_400_BAD_REQUEST)
+            
+            article = self.s2ag_service.get_article(article_doi)
 
-            if article in catalog_extension.article_identifiers.all():
-                return Response({'error': 'paper_doi: ' + paper_doi + ' already in catalog extension: ' + catalog_extension_name},
-                                status=status.HTTP_400_BAD_REQUEST)
-            article.title = title
-            article.abstract = abstract
-            article.year = year
-            article.citation_count = citation_count
-            article.reference_count = reference_count
-            article.fields_of_study = fields_of_study
-            article.publication_types = publication_types
-            article.publication_date = publication_date
-            article.authors = authors
-            article.save()
+            existing_articles = self.catalog_service.get_existing_articles([article_doi])
 
-            catalog_extension.article_identifiers.add(article)
+            if not existing_articles:
 
-            catalog_extension.save()
+                article_result = self.s2ag_service.get_articles([article_doi])
 
-            return Response({"info": "paper_doi: " + paper_doi + " added to catalog extension: " + catalog_extension_name},
-                            status=status.HTTP_200_OK)
+                if type(article_result) is int:
+                    return Response({'error': 'Error while getting article from external source'}, status=status.HTTP_502_BAD_GATEWAY)
+
+                self.catalog_service.create_article_patterns(article_result)
+
+            self.catalog_service.add_articles_to_extension(user.username, catalog_base_name, catalog_extension_name, [article_doi])
+            
+            return Response({"info": "article with doi: " + article_doi + " added to catalog extension: " + catalog_extension_name}, status=status.HTTP_200_OK)
 
         elif edit_type == "remove_s2ag_paper_id":
-            print('heres')
-            paper_doi = request.data.get('paper_doi', None)
+
+            # TODO: this is old code, need to update to new pattern
+
+            article_doi = request.data.get('article_doi', None)
 
             fields = {
-                'paper_doi': paper_doi
+                'article_doi': article_doi
             }
 
             validation_result = self.request_validator.validate(fields)
 
             if validation_result:
                 return validation_result
+            
+            article_in_extension = self.catalog_service.check_if_article_in_extension(user.username, catalog_base_name, catalog_extension_name, article_doi)
 
-            catalog_extension_paper_identifiers = catalog_extension.article_identifiers.all()
+            if not article_in_extension:
+                return Response({'error': 'article not in extension'}, status=status.HTTP_400_BAD_REQUEST)
+            
+            self.catalog_service.remove_article_from_extension(user.username, catalog_base_name, catalog_extension_name, article_doi)
 
-            paper_identifier = Article.objects.filter(DOI=paper_doi).first()
-
-            if paper_identifier not in catalog_extension_paper_identifiers:
-                return Response({'error': 'paper_doi: ' + paper_doi + ' not in catalog extension'},
-                                status=status.HTTP_400_BAD_REQUEST)
-
-            catalog_extension.article_identifiers.remove(paper_identifier)
-
-            return Response(status=status.HTTP_200_OK)
+            return Response({"info": "article with doi: " + article_doi + " removed from catalog extension: " + catalog_extension_name}, status=status.HTTP_200_OK)
 
     def delete(self, request):
         
         user = request.user
-        catalog_name = request.data.get('catalog_name', None)
+        catalog_base_name = request.data.get('catalog_base_name', None)
         catalog_extension_name = request.data.get('catalog_extension_name', None)
 
         fields = {
-            'catalog_name': catalog_name,
+            'catalog_base_name': catalog_base_name,
             'catalog_extension_name': catalog_extension_name
         }
 
@@ -555,17 +492,17 @@ class CatalogExtensionView(APIView):
         if validation_result:
             return validation_result
 
-        catalog_base = CatalogBase.objects.filter(owner=user, catalog_name=catalog_name).first()
+        catalog_base = self.catalog_service.check_if_base_exists(user.username, catalog_base_name)
 
         if not catalog_base:
             return Response({'error': 'catalog base not found'}, status=status.HTTP_404_NOT_FOUND)
 
-        catalog_extension = catalog_base.catalog_extensions.filter(catalog_extension_name=catalog_extension_name).first()
+        catalog_extension = self.catalog_service.check_if_extension_exists(user.username, catalog_base_name, catalog_extension_name)
 
         if not catalog_extension:
             return Response({'error': 'catalog extension not found'}, status=status.HTTP_404_NOT_FOUND)
 
-        catalog_extension.delete()
+        self.catalog_service.delete_extension_node(user.username, catalog_base_name, catalog_extension_name)
 
         return Response({"info": "catalog extension deleted"}, status=status.HTTP_200_OK)
 
