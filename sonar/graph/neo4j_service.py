@@ -127,14 +127,16 @@ class CatalogService():
             UNWIND article_bundle.authors AS coauthor
             MATCH (cau:Author {s2ag_id: coauthor.s2ag_id})
             WHERE cau.s2ag_id <> au.s2ag_id
-            MERGE (au)-[:COAUTHOR_OF {weight: 1}]-(cau)
+            MERGE (au)-[c:COAUTHOR_OF]-(cau)
+            ON CREATE SET c.count = 0.5
+            ON MATCH SET c.count = c.count + 0.5
         """
 
         with self.neo4j_client.driver.session().begin_transaction() as tx:
 
             tx.run(article_creation_query, parameters={"article_bundles": article_bundles})
             tx.run(author_creation_query, parameters={"article_bundles": article_bundles})
-
+            
     def create_author_node(self, author: Author):
         
         query = """
