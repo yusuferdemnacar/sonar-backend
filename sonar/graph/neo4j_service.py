@@ -151,7 +151,7 @@ class CatalogService():
         query = """
             UNWIND $dois AS doi
             MATCH (a:Article), (cb:CatalogBase)-[o:OWNED_BY]->(u:User)
-            WHERE a.doi = $doi AND cb.name = $catalog_base_name AND u.username = $username
+            WHERE a.doi = doi AND cb.name = $catalog_base_name AND u.username = $username
             MERGE (a)-[i:IN]->(cb)
         """
 
