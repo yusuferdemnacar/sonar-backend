@@ -123,6 +123,11 @@ class CatalogService():
                 au.citation_count = author.citation_count,
                 au.h_index = author.h_index
             MERGE (a)-[:AUTHORED_BY]->(au)
+            WITH au, article_bundle
+            UNWIND article_bundle.authors AS coauthor
+            MATCH (cau:Author {s2ag_id: coauthor.s2ag_id})
+            WHERE cau.s2ag_id <> au.s2ag_id
+            MERGE (au)-[:COAUTHOR_OF {weight: 1}]-(cau)
         """
 
         with self.neo4j_client.driver.session().begin_transaction() as tx:
@@ -380,6 +385,6 @@ class CatalogService():
 
         result = self.neo4j_client.run(query, parameters={"username": username})
 
-        catalog_bases = [{"catalog_base":record['catalog_base'],"article_count":record['article_count']} for record in result]
+        catalog_bases = [{"catalog_base": int(record['catalog_base']), "article_count": int(record['article_count'])} for record in result]
 
         return catalog_bases
