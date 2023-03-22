@@ -8,3 +8,9 @@ class Neo4jClient:
 
     def close(self):
         self.driver.close()
+
+    def run(self, query, parameters=None):
+        data = []
+        with self.driver.session() as session:
+            data = session.run(query=query, parameters=parameters).data()
+            return data

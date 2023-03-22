@@ -1,15 +1,22 @@
 from datetime import datetime
-from typing import TypedDict, List
-
+from typing import TypedDict, List, Dict, Optional
 
 class Article(TypedDict):
-    DOI: str
-    title: str
-    abstract: str
-    year: int
-    citation_count: int
-    reference_count: int
-    fields_of_study: List[str]
-    publication_types: List[str]
-    publication_date: str
-    authors: List[str]
+    doi: str
+    # external_ids: Optional[Dict[str, str]]
+    s2ag_url: Optional[str]
+    title: Optional[str]
+    abstract: Optional[str]
+    venue: Optional[str]
+    year: Optional[int]
+    outbound_citation_count: Optional[int]
+    inbound_citation_count: Optional[int]
+    s2ag_influential_inbound_citation_count: Optional[int]
+    is_open_access: Optional[bool]
+    open_access_pdf_url: Optional[str]
+    fields_of_study: Optional[List[str]]
+    # publication_venue: Optional[Dict[str, str]]
+    publication_types: Optional[List[str]]
+    publication_date: Optional[datetime.date]
+    # journal: Optional[Dict[str, str]]
+    

@@ -1,9 +1,13 @@
-from typing import List, TypedDict
-
+from typing import List, TypedDict, Optional, Dict
 
 class Author(TypedDict):
-    name: str
-    paper_count: int
-    citation_count: int
-    h_index: int
-    affiliations: List[str]
+    name: Optional[str]
+    s2ag_id: Optional[str]
+    # external_ids: Optional[Dict[str, str]]
+    s2ag_url: Optional[str]
+    aliases: Optional[List[str]]
+    affiliations: Optional[List[str]]
+    homepage: Optional[str]
+    paper_count: Optional[int]
+    citation_count: Optional[int]
+    h_index: Optional[int]
