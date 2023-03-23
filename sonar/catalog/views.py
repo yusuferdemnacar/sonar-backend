@@ -374,7 +374,8 @@ class CatalogExtensionView(APIView):
                 return Response({'error': 'too many outbound citations'}, status=status.HTTP_400_BAD_REQUEST)
             
             base_article_dois = [article["doi"] for article in base_articles]
-            outbound_citation_article_dois = set(self.s2ag_service.get_outbound_citation_article_dois(base_article_dois))
+            outbound_citation_articles = self.s2ag_service.get_outbound_citation_article_dois(base_article_dois)
+            outbound_citation_article_dois = set([article["doi"] for article in outbound_citation_articles])
 
             print("outbound_citation_article_dois: ", time.time() - t)
             t = time.time()
@@ -393,6 +394,8 @@ class CatalogExtensionView(APIView):
 
             # split new articles into bundles of 1000
             new_article_bundle_batches = [new_article_bundles[i:i+1000] for i in range(0, len(new_article_bundles), 1000)]
+
+            batch = 0
 
             for new_article_bundle_batch in new_article_bundle_batches:
 
