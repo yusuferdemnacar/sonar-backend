@@ -523,19 +523,20 @@ def get_all_catalog_bases(request):
 @permission_classes([IsAuthenticated])
 def get_catalog_extensions(request):
     user = request.user
-    catalog_name = request.GET.get('catalog_name', None)
-    if not catalog_name:
+    neo4j_client = Neo4jClient()
+    catalog_service = CatalogService(neo4j_client)
+    catalog_base_name = request.GET.get('catalog_base_name', None)
+    if not catalog_base_name:
         return Response({'error': 'no catalog base given'}, status=status.HTTP_404_NOT_FOUND)
 
-    catalog_base = CatalogBase.objects.filter(owner=user, catalog_name=catalog_name).first()
+    catalog_base = catalog_service.check_if_base_exists(user.username, catalog_base_name)
 
     if not catalog_base:
         return Response({'error': 'catalog base not found'}, status=status.HTTP_404_NOT_FOUND)
 
-    catalog_extensions = CatalogExtension.objects.filter(catalog_base=catalog_base)
+    catalog_extensions = catalog_service.get_extensions_of_catalog_base(user.username, catalog_base_name)
 
-    catalog_extensions_serialized = CatalogExtensionSerializer(catalog_extensions, many=True)
-    return Response(catalog_extensions_serialized.data, status=status.HTTP_200_OK)
+    return Response(catalog_extensions, status=status.HTTP_200_OK)
 
 @api_view(['GET',])
 @permission_classes([IsAuthenticated])
@@ -581,17 +582,18 @@ def get_catalog_extension_articles(request):
 @permission_classes([IsAuthenticated])
 def get_catalog_extension_names(request):
     user = request.user
-    catalog_name = request.GET.get('catalog_name', None)
-    if not catalog_name:
+    neo4j_client = Neo4jClient()
+    catalog_service = CatalogService(neo4j_client)
+    catalog_base_name = request.GET.get('catalog_base_name', None)
+    if not catalog_base_name:
         return Response({'error': 'no catalog base given'}, status=status.HTTP_404_NOT_FOUND)
 
-    catalog_base = CatalogBase.objects.filter(owner=user, catalog_name=catalog_name).first()
+    catalog_base = catalog_service.check_if_base_exists(user.username, catalog_base_name)
 
     if not catalog_base:
         return Response({'error': 'catalog base not found'}, status=status.HTTP_404_NOT_FOUND)
 
-    catalog_extensions = CatalogExtension.objects.filter(catalog_base=catalog_base).values_list('catalog_extension_name', flat=True)
-
+    catalog_extensions = catalog_service.get_extensions_of_catalog_base(user.username, catalog_base_name)
 
     return Response(catalog_extensions, status=status.HTTP_200_OK)
 
