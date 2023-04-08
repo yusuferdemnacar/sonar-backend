@@ -15,6 +15,8 @@ class S2AGSearchView(APIView):
 
         url = f'https://api.semanticscholar.org/graph/v1/paper/search?query={search_query}&limit=25&offset={(int(offset)-1)*25}&fields=externalIds,title,abstract,year,citationCount,referenceCount,fieldsOfStudy,publicationTypes,publicationDate,authors'
 
+        print(url)
+
         s2ag_response = requests.get(url)
         s2ag_response_data = s2ag_response.json()["data"]
 
@@ -22,10 +24,15 @@ class S2AGSearchView(APIView):
 
         for paper in s2ag_response_data:
 
-            if "DOI" not in paper["externalIds"].keys():
-                continue
-
-            DOI = paper["externalIds"]["DOI"]
+            if "DOI" in paper["externalIds"].keys():
+                DOI = paper["externalIds"]["DOI"]
+            else:
+                if "ArXiv" in paper["externalIds"].keys():
+                    DOI = "10.48550/arXiv." + paper["externalIds"]["ArXiv"]
+                    print(DOI)
+                else:
+                    continue
+            
             title = paper["title"]
             abstract = paper["abstract"]
             year = paper["year"]
