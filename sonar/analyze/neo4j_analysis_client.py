@@ -29,11 +29,11 @@ class Neo4jAnalysisClient(Neo4jClient):
                 'MATCH (u:User)<-[:OWNED_BY]-(cb:CatalogBase)<-[:EXTENDS]-(ce:CatalogExtension)
                 WHERE u.username = "{username}" AND cb.name = "{catalog_base_name}" AND ce.name = "{catalog_extension_name}"
                 WITH cb, ce
-                MATCH (a:Article)
-                WHERE (a)-[:IN]->(cb) OR (a)-[:IN]->(ce)
-                WITH a
-                MATCH (a)-[r:CITES]-(c:Article)
-                RETURN id(a) AS source, id(c) AS target, type(r) AS type')
+                MATCH (a:Article), (c:Article)
+                WHERE ((a)-[:IN]->(cb) OR (a)-[:IN]->(ce)) AND ((c)-[:IN]->(cb) OR (c)-[:IN]->(ce))
+                WITH a, c
+                MATCH (a)-[r:CITES]-(c)
+                RETURN DISTINCT id(a) AS source, id(c) AS target, type(r) AS type')
             """.format(username=username, catalog_base_name=catalog_base_name, catalog_extension_name=catalog_extension_name)
            
         elif graph_type == ('Author', 'COAUTHOR_OF'):
@@ -47,11 +47,11 @@ class Neo4jAnalysisClient(Neo4jClient):
                 'MATCH (u:User)<-[:OWNED_BY]-(cb:CatalogBase)<-[:EXTENDS]-(ce:CatalogExtension)
                 WHERE u.username = "{username}" AND cb.name = "{catalog_base_name}" AND ce.name = "{catalog_extension_name}"
                 WITH cb, ce
-                MATCH (a:Article)-[:AUTHORED_BY]->(au:Author)
-                WHERE (a)-[:IN]->(cb) OR (a)-[:IN]->(ce)
-                WITH au
-                MATCH (au)-[r:COAUTHOR_OF]-(m:Author)
-                RETURN id(au) AS source, id(m) AS target, type(r) AS type')
+                MATCH (au1:Author), (au2:Author)
+                WHERE ((au1)<-[:AUTHORED_BY]-(:Article)-[:IN]->(cb) OR (au1)<-[:AUTHORED_BY]-(:Article)-[:IN]->(ce)) AND ((au2)<-[:AUTHORED_BY]-(:Article)-[:IN]->(cb) OR (au2)<-[:AUTHORED_BY]-(:Article)-[:IN]->(ce))
+                WITH au1, au2
+                MATCH (au1)-[r:COAUTHOR_OF]-(au2)
+                RETURN DISTINCT id(au1) AS source, id(au2) AS target, type(r) AS type')
             """.format(username=username, catalog_base_name=catalog_base_name, catalog_extension_name=catalog_extension_name)
 
         tx.run(named_graph_query)
