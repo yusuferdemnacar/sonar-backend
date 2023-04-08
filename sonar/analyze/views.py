@@ -41,23 +41,25 @@ class BetweennessCentralityView(APIView):
         if validation_result:
             return validation_result
         
-        homogenous_graph_types = [
-            ("Author", "COAUTHOR_OF"),
-            ("Article", "CITES"),
-        ]
+        homogenous_graph_types = {
+            ("Author", "COAUTHOR_OF"): "UNDIRECTED",
+            ("Article", "CITES"): "DIRECTED",
+        }
 
-        if node_type not in [pair[0] for pair in homogenous_graph_types]:
+        if node_type not in [pair[0] for pair in homogenous_graph_types.keys()]:
             return Response({'error': 'invalid node type'}, status=status.HTTP_400_BAD_REQUEST)
         
-        print(homogenous_graph_types[:][1])
-        
-        if edge_type not in [pair[1] for pair in homogenous_graph_types]:
+        if edge_type not in [pair[1] for pair in homogenous_graph_types.keys()]:
             return Response({'error': 'invalid edge type'}, status=status.HTTP_400_BAD_REQUEST)
         
-        if (node_type, edge_type) not in homogenous_graph_types:
+        if (node_type, edge_type) not in homogenous_graph_types.keys():
             return Response({'error': 'invalid node type and edge type combination'}, status=status.HTTP_400_BAD_REQUEST)
 
         betweenness = self.neo4j_analysis_client.calculate_betweenness_centrality(user.username, catalog_base_name, catalog_extension_name, (node_type, edge_type))
+
+        if homogenous_graph_types[(node_type, edge_type)] == "UNDIRECTED":
+            for result in betweenness:
+                result["betweenness_centrality_score"] /= 2
 
         return Response(betweenness, status=status.HTTP_200_OK)
     
@@ -88,15 +90,15 @@ class ClosenessCentralityView(APIView):
         if validation_result:
             return validation_result
         
-        homogenous_graph_types = [
-            ("Author", "COAUTHOR_OF"),
-            ("Article", "CITES"),
-        ]
+        homogenous_graph_types = {
+            ("Author", "COAUTHOR_OF"): "UNDIRECTED",
+            ("Article", "CITES"): "DIRECTED",
+        }
 
-        if node_type not in [pair[0] for pair in homogenous_graph_types]:
+        if node_type not in [pair[0] for pair in homogenous_graph_types.keys()]:
             return Response({'error': 'invalid node type'}, status=status.HTTP_400_BAD_REQUEST)
         
-        if edge_type not in [pair[1] for pair in homogenous_graph_types]:
+        if edge_type not in [pair[1] for pair in homogenous_graph_types.keys()]:
             return Response({'error': 'invalid edge type'}, status=status.HTTP_400_BAD_REQUEST)
         
         if (node_type, edge_type) not in homogenous_graph_types:
@@ -133,18 +135,18 @@ class EigenvectorCentralityView(APIView):
         if validation_result:
             return validation_result
         
-        homogenous_graph_types = [
-            ("Author", "COAUTHOR_OF"),
-            ("Article", "CITES"),
-        ]
+        homogenous_graph_types = {
+            ("Author", "COAUTHOR_OF"): "UNDIRECTED",
+            ("Article", "CITES"): "DIRECTED",
+        }
 
-        if node_type not in [pair[0] for pair in homogenous_graph_types]:
+        if node_type not in [pair[0] for pair in homogenous_graph_types.keys()]:
             return Response({'error': 'invalid node type'}, status=status.HTTP_400_BAD_REQUEST)
         
-        if edge_type not in [pair[1] for pair in homogenous_graph_types]:
+        if edge_type not in [pair[1] for pair in homogenous_graph_types.keys()]:
             return Response({'error': 'invalid edge type'}, status=status.HTTP_400_BAD_REQUEST)
         
-        if (node_type, edge_type) not in homogenous_graph_types:
+        if (node_type, edge_type) not in homogenous_graph_types.keys():
             return Response({'error': 'invalid node type and edge type combination'}, status=status.HTTP_400_BAD_REQUEST)
 
         eigenvector = self.neo4j_analysis_client.calculate_eigenvector_centrality(user.username, catalog_base_name, catalog_extension_name, (node_type, edge_type))
@@ -178,18 +180,18 @@ class DegreeCentralityView(APIView):
         if validation_result:
             return validation_result
         
-        homogenous_graph_types = [
-            ("Author", "COAUTHOR_OF"),
-            ("Article", "CITES"),
-        ]
+        homogenous_graph_types = {
+            ("Author", "COAUTHOR_OF"): "UNDIRECTED",
+            ("Article", "CITES"): "DIRECTED",
+        }
 
-        if node_type not in [pair[0] for pair in homogenous_graph_types]:
+        if node_type not in [pair[0] for pair in homogenous_graph_types.keys()]:
             return Response({'error': 'invalid node type'}, status=status.HTTP_400_BAD_REQUEST)
         
-        if edge_type not in [pair[1] for pair in homogenous_graph_types]:
+        if edge_type not in [pair[1] for pair in homogenous_graph_types.keys()]:
             return Response({'error': 'invalid edge type'}, status=status.HTTP_400_BAD_REQUEST)
         
-        if (node_type, edge_type) not in homogenous_graph_types:
+        if (node_type, edge_type) not in homogenous_graph_types.keys():
             return Response({'error': 'invalid node type and edge type combination'}, status=status.HTTP_400_BAD_REQUEST)
 
         degree = self.neo4j_analysis_client.calculate_degree_centrality(user.username, catalog_base_name, catalog_extension_name, (node_type, edge_type))
@@ -223,18 +225,18 @@ class PageRankView(APIView):
         if validation_result:
             return validation_result
         
-        homogenous_graph_types = [
-            ("Author", "COAUTHOR_OF"),
-            ("Article", "CITES"),
-        ]
+        homogenous_graph_types = {
+            ("Author", "COAUTHOR_OF"): "UNDIRECTED",
+            ("Article", "CITES"): "DIRECTED",
+        }
 
-        if node_type not in [pair[0] for pair in homogenous_graph_types]:
+        if node_type not in [pair[0] for pair in homogenous_graph_types.keys()]:
             return Response({'error': 'invalid node type'}, status=status.HTTP_400_BAD_REQUEST)
         
-        if edge_type not in [pair[1] for pair in homogenous_graph_types]:
+        if edge_type not in [pair[1] for pair in homogenous_graph_types.keys()]:
             return Response({'error': 'invalid edge type'}, status=status.HTTP_400_BAD_REQUEST)
         
-        if (node_type, edge_type) not in homogenous_graph_types:
+        if (node_type, edge_type) not in homogenous_graph_types.keys():
             return Response({'error': 'invalid node type and edge type combination'}, status=status.HTTP_400_BAD_REQUEST)
 
         page_rank = self.neo4j_analysis_client.calculate_page_rank(user.username, catalog_base_name, catalog_extension_name, (node_type, edge_type))
@@ -268,18 +270,18 @@ class ArticleRankView(APIView):
         if validation_result:
             return validation_result
         
-        homogenous_graph_types = [
-            ("Author", "COAUTHOR_OF"),
-            ("Article", "CITES"),
-        ]
+        homogenous_graph_types = {
+            ("Author", "COAUTHOR_OF"): "UNDIRECTED",
+            ("Article", "CITES"): "DIRECTED",
+        }
 
-        if node_type not in [pair[0] for pair in homogenous_graph_types]:
+        if node_type not in [pair[0] for pair in homogenous_graph_types.keys()]:
             return Response({'error': 'invalid node type'}, status=status.HTTP_400_BAD_REQUEST)
         
-        if edge_type not in [pair[1] for pair in homogenous_graph_types]:
+        if edge_type not in [pair[1] for pair in homogenous_graph_types.keys()]:
             return Response({'error': 'invalid edge type'}, status=status.HTTP_400_BAD_REQUEST)
         
-        if (node_type, edge_type) not in homogenous_graph_types:
+        if (node_type, edge_type) not in homogenous_graph_types.keys():
             return Response({'error': 'invalid node type and edge type combination'}, status=status.HTTP_400_BAD_REQUEST)
 
         article_rank = self.neo4j_analysis_client.calculate_article_rank(user.username, catalog_base_name, catalog_extension_name, (node_type, edge_type))
@@ -316,18 +318,18 @@ class HarmonicCentralityView(APIView):
         if validation_result:
             return validation_result
         
-        homogenous_graph_types = [
-            ("Author", "COAUTHOR_OF"),
-            ("Article", "CITES"),
-        ]
+        homogenous_graph_types = {
+            ("Author", "COAUTHOR_OF"): "UNDIRECTED",
+            ("Article", "CITES"): "DIRECTED",
+        }
 
-        if node_type not in [pair[0] for pair in homogenous_graph_types]:
+        if node_type not in [pair[0] for pair in homogenous_graph_types.keys()]:
             return Response({'error': 'invalid node type'}, status=status.HTTP_400_BAD_REQUEST)
         
-        if edge_type not in [pair[1] for pair in homogenous_graph_types]:
+        if edge_type not in [pair[1] for pair in homogenous_graph_types.keys()]:
             return Response({'error': 'invalid edge type'}, status=status.HTTP_400_BAD_REQUEST)
         
-        if (node_type, edge_type) not in homogenous_graph_types:
+        if (node_type, edge_type) not in homogenous_graph_types.keys():
             return Response({'error': 'invalid node type and edge type combination'}, status=status.HTTP_400_BAD_REQUEST)
 
         harmonic_centrality = self.neo4j_analysis_client.calculate_harmonic_centrality(user.username, catalog_base_name, catalog_extension_name, (node_type, edge_type))

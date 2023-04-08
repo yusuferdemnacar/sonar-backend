@@ -128,8 +128,6 @@ class CatalogService():
             MATCH (cau:Author {s2ag_id: coauthor.s2ag_id})
             WHERE cau.s2ag_id <> au.s2ag_id
             MERGE (au)-[c:COAUTHOR_OF]-(cau)
-            ON CREATE SET c.count = 0.5
-            ON MATCH SET c.count = c.count + 0.5
         """
 
         with self.neo4j_client.driver.session().begin_transaction() as tx:
