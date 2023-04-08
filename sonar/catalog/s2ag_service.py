@@ -142,10 +142,15 @@ class S2AGService():
 
             for inbound_citation_article_externalIds in inbound_citation_article_externalIds_batch:
 
-                if inbound_citation_article_externalIds is None or "DOI" not in inbound_citation_article_externalIds.keys():
-                    continue
+                # Implement what to do if doi is not in externalIds here
 
-                inbound_citation_article_doi = inbound_citation_article_externalIds.get('DOI', None)
+                if "DOI" in inbound_citation_article_externalIds.keys():
+                    inbound_citation_article_doi = inbound_citation_article_externalIds.get('DOI', None)
+                else:
+                    if "ArXiv" in inbound_citation_article_externalIds.keys():
+                        inbound_citation_article_doi = "10.48550/arXiv." + inbound_citation_article_externalIds.get('ArXiv', None)
+                    else:
+                        continue
 
                 if inbound_citation_article_doi is not None:
                     inbound_citation_article_dois.append(inbound_citation_article_doi)
@@ -205,10 +210,18 @@ class S2AGService():
 
                 outbound_citation_article_externalIds = outbound_citation_article.get('externalIds', None)
 
-                if outbound_citation_article_externalIds is None or "DOI" not in outbound_citation_article_externalIds.keys():
+                if outbound_citation_article_externalIds is None:
                     continue
 
-                outbound_citation_article_doi = outbound_citation_article_externalIds.get('DOI', None)
+                # Implement what to do if doi is not in externalIds here
+
+                if "DOI" in outbound_citation_article_externalIds.keys():
+                    outbound_citation_article_doi = outbound_citation_article_externalIds.get('DOI', None)
+                else:
+                    if "ArXiv" in outbound_citation_article_externalIds.keys():
+                        outbound_citation_article_doi = "10.48550/arXiv." + outbound_citation_article_externalIds.get('ArXiv', None)
+                    else:
+                        continue
 
                 # TODO: really check if citationCount is not None
 
