@@ -125,7 +125,6 @@ class S2AGService():
         while next:
 
             print(offset, limit)
-
             inbound_citations_url = "https://api.semanticscholar.org/graph/v1/paper/" + article_doi + "/citations?fields=externalIds&limit=" + str(limit) + "&offset=" + str(offset)
             response = requests.get(inbound_citations_url, headers = {'x-api-key':os.environ.get('S2AG_API_KEY')})
 
