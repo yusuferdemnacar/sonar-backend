@@ -9,12 +9,12 @@ from graph.models import Citation
 class S2AGService():
 
     def get_article(self, doi):
-
         print("Getting article details from S2AG API for DOI {doi}".format(doi=doi))
         article_bundle = {}
 
         retry_count = 0
-
+        if doi.startswith("10.48550/arXiv."):
+            doi=doi.replace("10.48550/arXiv.", "ARXIV:")
         while True:
 
             s2ag_article_details_url = "https://api.semanticscholar.org/graph/v1/paper/{doi}?fields=externalIds,url,title,abstract,venue,year,referenceCount,citationCount,influentialCitationCount,isOpenAccess,openAccessPdf,fieldsOfStudy,publicationVenue,publicationTypes,publicationDate,journal,authors.url,authors.name,authors.aliases,authors.affiliations,authors.homepage,authors.paperCount,authors.citationCount,authors.hIndex".format(doi=doi)
@@ -122,6 +122,8 @@ class S2AGService():
 
         next = True
 
+        if article_doi.startswith("10.48550/arXiv."):
+            article_doi=article_doi.replace("10.48550/arXiv.", "ARXIV:")
         while next:
 
             print(offset, limit)
@@ -189,7 +191,8 @@ class S2AGService():
         limit = 1000
 
         next = True
-
+        if article_doi.startswith("10.48550/arXiv."):
+            article_doi=article_doi.replace("10.48550/arXiv.", "ARXIV:")
         while next:
             
             outbound_citations_url = "https://api.semanticscholar.org/graph/v1/paper/" + article_doi + "/references?fields=externalIds,citationCount&limit=" + str(limit) + "&offset=" + str(offset)
