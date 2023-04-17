@@ -144,6 +144,9 @@ class S2AGService():
 
                 # Implement what to do if doi is not in externalIds here
 
+                if inbound_citation_article_externalIds is None:
+                    continue
+
                 if "DOI" in inbound_citation_article_externalIds.keys():
                     inbound_citation_article_doi = inbound_citation_article_externalIds.get('DOI', None)
                 else:
