@@ -5,7 +5,7 @@ from rest_framework.authtoken.models import Token
 from rest_framework.permissions import IsAuthenticated
 from django.contrib.auth import authenticate, login, logout
 from .serializers import *
-from graph.neo4j_service import UserService
+from graph.graph_service import UserService
 from neo4j_client import Neo4jClient
 
 class RegisterView(APIView):

@@ -2,7 +2,10 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework import status
-from .neo4j_analysis_client import Neo4jAnalysisClient
+
+from neo4j_client import Neo4jClient
+from graph.graph_service import CatalogService
+from .analysis_service import CentralityService
 
 class RequestValidator():
 
@@ -13,30 +16,31 @@ class RequestValidator():
             return Response({'error': 'missing form fields: ' + str(missing_fields)}, status=status.HTTP_400_BAD_REQUEST)
 
         return None
-
-class BetweennessCentralityView(APIView):
+    
+class CentralityView(APIView):
 
     permission_classes = (IsAuthenticated,)
-    neo4j_analysis_client = Neo4jAnalysisClient()
     request_validator = RequestValidator()
+    neo4j_client = Neo4jClient()
+    catalog_service = CatalogService(neo4j_client)
+    centrality_service = CentralityService(neo4j_client)
 
-    def get(self, request):
+    def get_score(self, request, score_function):
 
         user = request.user
-        
-        node_type = request.query_params.get('node_type')
-        edge_type = request.query_params.get('edge_type')
-        catalog_base_name = request.query_params.get('catalog_base_name')
-        catalog_extension_name = request.query_params.get('catalog_extension_name')
 
-        fields = {
+        node_type = request.query_params.get('node_type', None)
+        edge_type = request.query_params.get('edge_type', None)
+        catalog_base_name = request.query_params.get('catalog_base_name', None)
+        catalog_extension_name = request.query_params.get('catalog_extension_name', None)
+
+        mandatory_fields = {
             'node_type': node_type,
             'edge_type': edge_type,
             'catalog_base_name': catalog_base_name,
-            'catalog_extension_name': catalog_extension_name
         }
 
-        validation_result = self.request_validator.validate(fields)
+        validation_result = self.request_validator.validate(mandatory_fields)
 
         if validation_result:
             return validation_result
@@ -54,284 +58,65 @@ class BetweennessCentralityView(APIView):
         
         if (node_type, edge_type) not in homogenous_graph_types.keys():
             return Response({'error': 'invalid node type and edge type combination'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        catalog_base_exists = self.catalog_service.check_if_base_exists(user.username, catalog_base_name)
 
-        betweenness = self.neo4j_analysis_client.calculate_betweenness_centrality(user.username, catalog_base_name, catalog_extension_name, (node_type, edge_type))
+        if not catalog_base_exists:
+            return Response({'error': 'catalog base not found'}, status=status.HTTP_404_NOT_FOUND)
 
-        if homogenous_graph_types[(node_type, edge_type)] == "UNDIRECTED":
-            for result in betweenness:
+        if catalog_extension_name:
+
+            catalog_extension_exists = self.catalog_service.check_if_extension_exists(user.username, catalog_base_name, catalog_extension_name)
+        
+            if not catalog_extension_exists:
+                return Response({'error': 'catalog extension not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+        score = self.centrality_service.calculate_centrality(user.username, catalog_base_name, catalog_extension_name, (node_type, edge_type), score_function)
+
+        if score_function == self.centrality_service.betweenness_centrality and homogenous_graph_types[(node_type, edge_type)] == "UNDIRECTED":
+            for result in score:
                 result["betweenness_centrality_score"] /= 2
 
-        return Response(betweenness, status=status.HTTP_200_OK)
-    
-class ClosenessCentralityView(APIView):
+        return Response(score, status=status.HTTP_200_OK)
 
-    permission_classes = (IsAuthenticated,)
-    neo4j_analysis_client = Neo4jAnalysisClient()
-    request_validator = RequestValidator()
+class BetweennessCentralityView(CentralityView):
 
     def get(self, request):
 
-        user = request.user
-        
-        node_type = request.query_params.get('node_type')
-        edge_type = request.query_params.get('edge_type')
-        catalog_base_name = request.query_params.get('catalog_base_name')
-        catalog_extension_name = request.query_params.get('catalog_extension_name')
-
-        fields = {
-            'node_type': node_type,
-            'edge_type': edge_type,
-            'catalog_base_name': catalog_base_name,
-            'catalog_extension_name': catalog_extension_name
-        }
-
-        validation_result = self.request_validator.validate(fields)
-
-        if validation_result:
-            return validation_result
-        
-        homogenous_graph_types = {
-            ("Author", "COAUTHOR_OF"): "UNDIRECTED",
-            ("Article", "CITES"): "DIRECTED",
-        }
-
-        if node_type not in [pair[0] for pair in homogenous_graph_types.keys()]:
-            return Response({'error': 'invalid node type'}, status=status.HTTP_400_BAD_REQUEST)
-        
-        if edge_type not in [pair[1] for pair in homogenous_graph_types.keys()]:
-            return Response({'error': 'invalid edge type'}, status=status.HTTP_400_BAD_REQUEST)
-        
-        if (node_type, edge_type) not in homogenous_graph_types:
-            return Response({'error': 'invalid node type and edge type combination'}, status=status.HTTP_400_BAD_REQUEST)
-
-        closeness = self.neo4j_analysis_client.calculate_closeness_centrality(user.username, catalog_base_name, catalog_extension_name, (node_type, edge_type))
-
-        return Response(closeness, status=status.HTTP_200_OK)
+        return super().get_score(request, CentralityService.betweenness_centrality)
     
-class EigenvectorCentralityView(APIView):
-
-    permission_classes = (IsAuthenticated,)
-    neo4j_analysis_client = Neo4jAnalysisClient()
-    request_validator = RequestValidator()
+class ClosenessCentralityView(CentralityView):
 
     def get(self, request):
 
-        user = request.user
-        
-        node_type = request.query_params.get('node_type')
-        edge_type = request.query_params.get('edge_type')
-        catalog_base_name = request.query_params.get('catalog_base_name')
-        catalog_extension_name = request.query_params.get('catalog_extension_name')
+        return super().get_score(request, CentralityService.closeness_centrality)
 
-        fields = {
-            'node_type': node_type,
-            'edge_type': edge_type,
-            'catalog_base_name': catalog_base_name,
-            'catalog_extension_name': catalog_extension_name
-        }
-
-        validation_result = self.request_validator.validate(fields)
-
-        if validation_result:
-            return validation_result
-        
-        homogenous_graph_types = {
-            ("Author", "COAUTHOR_OF"): "UNDIRECTED",
-            ("Article", "CITES"): "DIRECTED",
-        }
-
-        if node_type not in [pair[0] for pair in homogenous_graph_types.keys()]:
-            return Response({'error': 'invalid node type'}, status=status.HTTP_400_BAD_REQUEST)
-        
-        if edge_type not in [pair[1] for pair in homogenous_graph_types.keys()]:
-            return Response({'error': 'invalid edge type'}, status=status.HTTP_400_BAD_REQUEST)
-        
-        if (node_type, edge_type) not in homogenous_graph_types.keys():
-            return Response({'error': 'invalid node type and edge type combination'}, status=status.HTTP_400_BAD_REQUEST)
-
-        eigenvector = self.neo4j_analysis_client.calculate_eigenvector_centrality(user.username, catalog_base_name, catalog_extension_name, (node_type, edge_type))
-
-        return Response(eigenvector, status=status.HTTP_200_OK)
-    
-class DegreeCentralityView(APIView):
-
-    permission_classes = (IsAuthenticated,)
-    neo4j_analysis_client = Neo4jAnalysisClient()
-    request_validator = RequestValidator()
+class EigenvectorCentralityView(CentralityView):
 
     def get(self, request):
 
-        user = request.user
-        
-        node_type = request.query_params.get('node_type')
-        edge_type = request.query_params.get('edge_type')
-        catalog_base_name = request.query_params.get('catalog_base_name')
-        catalog_extension_name = request.query_params.get('catalog_extension_name')
-
-        fields = {
-            'node_type': node_type,
-            'edge_type': edge_type,
-            'catalog_base_name': catalog_base_name,
-            'catalog_extension_name': catalog_extension_name
-        }
-
-        validation_result = self.request_validator.validate(fields)
-
-        if validation_result:
-            return validation_result
-        
-        homogenous_graph_types = {
-            ("Author", "COAUTHOR_OF"): "UNDIRECTED",
-            ("Article", "CITES"): "DIRECTED",
-        }
-
-        if node_type not in [pair[0] for pair in homogenous_graph_types.keys()]:
-            return Response({'error': 'invalid node type'}, status=status.HTTP_400_BAD_REQUEST)
-        
-        if edge_type not in [pair[1] for pair in homogenous_graph_types.keys()]:
-            return Response({'error': 'invalid edge type'}, status=status.HTTP_400_BAD_REQUEST)
-        
-        if (node_type, edge_type) not in homogenous_graph_types.keys():
-            return Response({'error': 'invalid node type and edge type combination'}, status=status.HTTP_400_BAD_REQUEST)
-
-        degree = self.neo4j_analysis_client.calculate_degree_centrality(user.username, catalog_base_name, catalog_extension_name, (node_type, edge_type))
-
-        return Response(degree, status=status.HTTP_200_OK)
+        return super().get_score(request, CentralityService.eigenvector_centrality)
     
-class PageRankView(APIView):
-
-    permission_classes = (IsAuthenticated,)
-    neo4j_analysis_client = Neo4jAnalysisClient()
-    request_validator = RequestValidator()
+class DegreeCentralityView(CentralityView):
 
     def get(self, request):
 
-        user = request.user
-        
-        node_type = request.query_params.get('node_type')
-        edge_type = request.query_params.get('edge_type')
-        catalog_base_name = request.query_params.get('catalog_base_name')
-        catalog_extension_name = request.query_params.get('catalog_extension_name')
-
-        fields = {
-            'node_type': node_type,
-            'edge_type': edge_type,
-            'catalog_base_name': catalog_base_name,
-            'catalog_extension_name': catalog_extension_name
-        }
-
-        validation_result = self.request_validator.validate(fields)
-
-        if validation_result:
-            return validation_result
-        
-        homogenous_graph_types = {
-            ("Author", "COAUTHOR_OF"): "UNDIRECTED",
-            ("Article", "CITES"): "DIRECTED",
-        }
-
-        if node_type not in [pair[0] for pair in homogenous_graph_types.keys()]:
-            return Response({'error': 'invalid node type'}, status=status.HTTP_400_BAD_REQUEST)
-        
-        if edge_type not in [pair[1] for pair in homogenous_graph_types.keys()]:
-            return Response({'error': 'invalid edge type'}, status=status.HTTP_400_BAD_REQUEST)
-        
-        if (node_type, edge_type) not in homogenous_graph_types.keys():
-            return Response({'error': 'invalid node type and edge type combination'}, status=status.HTTP_400_BAD_REQUEST)
-
-        page_rank = self.neo4j_analysis_client.calculate_page_rank(user.username, catalog_base_name, catalog_extension_name, (node_type, edge_type))
-
-        return Response(page_rank, status=status.HTTP_200_OK)
+        return super().get_score(request, CentralityService.degree_centrality)
     
-class ArticleRankView(APIView):
-
-    permission_classes = (IsAuthenticated,)
-    neo4j_analysis_client = Neo4jAnalysisClient()
-    request_validator = RequestValidator()
+class PageRankView(CentralityView):
 
     def get(self, request):
 
-        user = request.user
-        
-        node_type = request.query_params.get('node_type')
-        edge_type = request.query_params.get('edge_type')
-        catalog_base_name = request.query_params.get('catalog_base_name')
-        catalog_extension_name = request.query_params.get('catalog_extension_name')
-
-        fields = {
-            'node_type': node_type,
-            'edge_type': edge_type,
-            'catalog_base_name': catalog_base_name,
-            'catalog_extension_name': catalog_extension_name
-        }
-
-        validation_result = self.request_validator.validate(fields)
-
-        if validation_result:
-            return validation_result
-        
-        homogenous_graph_types = {
-            ("Author", "COAUTHOR_OF"): "UNDIRECTED",
-            ("Article", "CITES"): "DIRECTED",
-        }
-
-        if node_type not in [pair[0] for pair in homogenous_graph_types.keys()]:
-            return Response({'error': 'invalid node type'}, status=status.HTTP_400_BAD_REQUEST)
-        
-        if edge_type not in [pair[1] for pair in homogenous_graph_types.keys()]:
-            return Response({'error': 'invalid edge type'}, status=status.HTTP_400_BAD_REQUEST)
-        
-        if (node_type, edge_type) not in homogenous_graph_types.keys():
-            return Response({'error': 'invalid node type and edge type combination'}, status=status.HTTP_400_BAD_REQUEST)
-
-        article_rank = self.neo4j_analysis_client.calculate_article_rank(user.username, catalog_base_name, catalog_extension_name, (node_type, edge_type))
-
-        return Response(article_rank, status=status.HTTP_200_OK)
+        return super().get_score(request, CentralityService.page_rank)
     
-# write a class for harmonic centrality, it should be very similar to closeness centrality
-# for harmonic centrality
-
-class HarmonicCentralityView(APIView):
-
-    permission_classes = (IsAuthenticated,)
-    neo4j_analysis_client = Neo4jAnalysisClient()
-    request_validator = RequestValidator()
+class ArticleRankView(CentralityView):
 
     def get(self, request):
 
-        user = request.user
-        
-        node_type = request.query_params.get('node_type')
-        edge_type = request.query_params.get('edge_type')
-        catalog_base_name = request.query_params.get('catalog_base_name')
-        catalog_extension_name = request.query_params.get('catalog_extension_name')
+        return super().get_score(request, CentralityService.article_rank)
+class HarmonicCentralityView(CentralityView):
 
-        fields = {
-            'node_type': node_type,
-            'edge_type': edge_type,
-            'catalog_base_name': catalog_base_name,
-            'catalog_extension_name': catalog_extension_name
-        }
+    def get(self, request):
 
-        validation_result = self.request_validator.validate(fields)
-
-        if validation_result:
-            return validation_result
-        
-        homogenous_graph_types = {
-            ("Author", "COAUTHOR_OF"): "UNDIRECTED",
-            ("Article", "CITES"): "DIRECTED",
-        }
-
-        if node_type not in [pair[0] for pair in homogenous_graph_types.keys()]:
-            return Response({'error': 'invalid node type'}, status=status.HTTP_400_BAD_REQUEST)
-        
-        if edge_type not in [pair[1] for pair in homogenous_graph_types.keys()]:
-            return Response({'error': 'invalid edge type'}, status=status.HTTP_400_BAD_REQUEST)
-        
-        if (node_type, edge_type) not in homogenous_graph_types.keys():
-            return Response({'error': 'invalid node type and edge type combination'}, status=status.HTTP_400_BAD_REQUEST)
-
-        harmonic_centrality = self.neo4j_analysis_client.calculate_harmonic_centrality(user.username, catalog_base_name, catalog_extension_name, (node_type, edge_type))
-
-        return Response(harmonic_centrality, status=status.HTTP_200_OK)
+        return super().get_score(request, CentralityService.harmonic_centrality)
+    
