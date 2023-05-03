@@ -212,7 +212,9 @@ class CatalogService():
         query = """
             MATCH (a:Article)-[i:IN]->(c:CatalogBase)-[o:OWNED_BY]->(u:User)
             WHERE c.name = $catalog_base_name AND u.username = $username
-            RETURN a AS article
+            WITH a
+            MATCH (a)-[o: AUTHORED_BY]->(au:Author)
+            RETURN a AS article, collect(au) AS authors
             ORDER BY a.doi
             SKIP $offset
             LIMIT $limit
@@ -220,7 +222,18 @@ class CatalogService():
 
         result = self.neo4j_client.run(query, parameters={"catalog_base_name": catalog_base_name, "username": username, "offset": offset, "limit": limit})
 
-        articles = [Article(**record["article"]) for record in result]
+        articles = [{'doi': record['article']['doi'],
+                     'title': record['article'].get('title', None),
+                     'abstract': record['article'].get('abstract', None),
+                     'year': record['article'].get('year', None),
+                     'citation_count': record['article'].get('inbound_citation_count', None),
+                     'reference_count': record['article'].get('outbound_citation_count', None),
+                     'fields_of_study': record['article'].get('fields_of_study', None),
+                     'publication_types': record['article'].get('publication_types', None),
+                     'publication_date': record['article'].get('publication_date', None,),
+                     'authors': [{'author_id': author['s2ag_id'], 'author_name': author['name']} for author in
+                                 record['authors']]
+                     } for record in result]
 
         return articles
 
@@ -233,8 +246,7 @@ class CatalogService():
         """
 
         result = self.neo4j_client.run(query, parameters={"catalog_base_name": catalog_base_name, "username": username})
-
-        count = int(result["article_count"])
+        count = int(result[0]["article_count"])
 
         return count
     
@@ -243,12 +255,25 @@ class CatalogService():
         query = """
             MATCH (a:Article)-[i:IN]->(c:CatalogExtension)-[e:EXTENDS]->(cb:CatalogBase)-[o:OWNED_BY]->(u:User)
             WHERE cb.name = $catalog_base_name AND u.username = $username AND c.name = $extension_name
-            RETURN a AS article
+            WITH a
+            MATCH (a)-[o: AUTHORED_BY]->(au:Author)
+            RETURN a AS article, collect(au) AS authors
         """
 
         result = self.neo4j_client.run(query, parameters={"catalog_base_name": catalog_base_name, "username": username, "extension_name": extension_name})
 
-        articles = [Article(**record["article"]) for record in result]
+        articles = [{'doi': record['article']['doi'],
+                     'title': record['article'].get('title', None),
+                     'abstract': record['article'].get('abstract', None),
+                     'year': record['article'].get('year', None),
+                     'citation_count': record['article'].get('inbound_citation_count', None),
+                     'reference_count': record['article'].get('outbound_citation_count', None),
+                     'fields_of_study': record['article'].get('fields_of_study', None),
+                     'publication_types': record['article'].get('publication_types', None),
+                     'publication_date': record['article'].get('publication_date', None,),
+                     'authors': [{'author_id': author['s2ag_id'], 'author_name': author['name']} for author in
+                                 record['authors']]
+                     } for record in result]
 
         return articles
 
@@ -258,7 +283,9 @@ class CatalogService():
         query = """
             MATCH (a:Article)-[i:IN]->(c:CatalogExtension)-[e:EXTENDS]->(cb:CatalogBase)-[o:OWNED_BY]->(u:User)
             WHERE cb.name = $catalog_base_name AND u.username = $username AND c.name = $extension_name
-            RETURN a AS article
+            WITH a
+            MATCH (a)-[o: AUTHORED_BY]->(au:Author)
+            RETURN a AS article, collect(au) AS authors
             ORDER BY a.doi
             SKIP $offset
             LIMIT $limit
@@ -266,11 +293,23 @@ class CatalogService():
 
         result = self.neo4j_client.run(query, parameters={"catalog_base_name": catalog_base_name,"extension_name":extension_name ,"username": username, "offset": offset, "limit": limit})
 
-        articles = [Article(**record["article"]) for record in result]
+        articles = [{'doi': record['article']['doi'],
+                     'title': record['article'].get('title', None),
+                     'abstract': record['article'].get('abstract', ''),
+                     'year': record['article'].get('year', None),
+                     'citation_count': record['article'].get('inbound_citation_count', None),
+                     'reference_count': record['article'].get('outbound_citation_count', None),
+                     'fields_of_study': record['article'].get('fields_of_study', []),
+                     'publication_types': record['article'].get('publication_types', []),
+                     'publication_date': record['article'].get('publication_date', None,),
+                     'authors': [{'author_id': author['s2ag_id'], 'author_name': author['name']} for author in
+                                 record['authors']]
+                     } for record in result]
+
 
         return articles
 
-    def get_base_articles_count(self, username, catalog_base_name, extension_name) -> int:
+    def get_extension_articles_count(self, username, catalog_base_name, extension_name) -> int:
 
         query = """
             MATCH (a:Article)-[i:IN]->(c:CatalogExtension)-[e:EXTENDS]->(cb:CatalogBase)-[o:OWNED_BY]->(u:User)
@@ -345,7 +384,7 @@ class CatalogService():
         else:
             return False
         
-    def get_existing_articles(self, dois) -> bool:
+    def get_existing_articles(self, dois) -> List[Article]:
         
         query = """
             MATCH (a:Article)
@@ -358,6 +397,33 @@ class CatalogService():
         articles = [Article(**record["article"]) for record in result]
 
         return articles
+
+    def get_existing_article_with_doi(self, doi):
+
+        query = """
+            MATCH (a:Article)
+            WHERE a.doi = $doi
+            WITH a
+            OPTIONAL MATCH (a)-[o: AUTHORED_BY]->(au:Author)
+            RETURN a AS article, collect(au) AS authors
+        """
+
+        result = self.neo4j_client.run(query, parameters={"doi": doi})
+
+        article =[{'doi': record['article']['doi'],
+                     'title': record['article'].get('title', None),
+                     'abstract': record['article'].get('abstract', ''),
+                     'year': record['article'].get('year', None),
+                     'citation_count': record['article'].get('inbound_citation_count', None),
+                     'reference_count': record['article'].get('outbound_citation_count', None),
+                     'fields_of_study': record['article'].get('fields_of_study', []),
+                     'publication_types': record['article'].get('publication_types', []),
+                     'publication_date': record['article'].get('publication_date', None,),
+                     'authors': [{'author_id': author['s2ag_id'], 'author_name': author['name']} for author in
+                                 record['authors']]
+                     } for record in result]
+
+        return article
     
     def get_existing_authors(self, author_name_list) -> bool:
 
@@ -385,6 +451,20 @@ class CatalogService():
 
         result = self.neo4j_client.run(query, parameters={"username": username})
 
-        catalog_bases = [{"catalog_base": int(record['catalog_base']), "article_count": int(record['article_count'])} for record in result]
+        catalog_bases = [{"catalog_base_name": record['catalog_base'], "article_count": int(record['article_count'])} for record in result]
 
         return catalog_bases
+
+    def get_extensions_of_catalog_base(self, username, catalog_base_name) -> List[str]:
+
+        query = """
+            MATCH (c:CatalogExtension)-[e:EXTENDS]->(cb:CatalogBase)-[o:OWNED_BY]->(u:User)
+            WHERE cb.name = $catalog_base_name AND u.username = $username
+            RETURN collect(c.name) AS catalog_extensions
+        """
+
+        result = self.neo4j_client.run(query, parameters={"catalog_base_name": catalog_base_name, "username": username})
+
+        catalog_extensions = result[0]["catalog_extensions"]
+
+        return catalog_extensions

@@ -9,4 +9,6 @@ urlpatterns = [
     path("extension/articles/", get_catalog_extension_articles, name="extension articles"),
     path("base/articles/", get_catalog_base_articles, name="base articles"),
     path("extension/names/", get_catalog_extension_names, name="extension articles"),
+    path("article/", get_article_with_doi, name="article"),
+    path("base/extension/", get_extension_articles_of_catalog_base, name="article"),
 ]

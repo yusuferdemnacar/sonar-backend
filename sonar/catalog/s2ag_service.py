@@ -1,3 +1,5 @@
+import threading
+
 from article.schemas import Article
 from author.schemas import Author
 import requests
@@ -9,12 +11,12 @@ from graph.models import Citation
 class S2AGService():
 
     def get_article(self, doi):
-
         print("Getting article details from S2AG API for DOI {doi}".format(doi=doi))
         article_bundle = {}
 
         retry_count = 0
-
+        if doi.startswith("10.48550/arXiv."):
+            doi=doi.replace("10.48550/arXiv.", "ARXIV:")
         while True:
 
             s2ag_article_details_url = "https://api.semanticscholar.org/graph/v1/paper/{doi}?fields=externalIds,url,title,abstract,venue,year,referenceCount,citationCount,influentialCitationCount,isOpenAccess,openAccessPdf,fieldsOfStudy,publicationVenue,publicationTypes,publicationDate,journal,authors.url,authors.name,authors.aliases,authors.affiliations,authors.homepage,authors.paperCount,authors.citationCount,authors.hIndex".format(doi=doi)
@@ -122,10 +124,11 @@ class S2AGService():
 
         next = True
 
+        if article_doi.startswith("10.48550/arXiv."):
+            article_doi=article_doi.replace("10.48550/arXiv.", "ARXIV:")
         while next:
 
             print(offset, limit)
-
             inbound_citations_url = "https://api.semanticscholar.org/graph/v1/paper/" + article_doi + "/citations?fields=externalIds&limit=" + str(limit) + "&offset=" + str(offset)
             response = requests.get(inbound_citations_url, headers = {'x-api-key':os.environ.get('S2AG_API_KEY')})
 
@@ -190,7 +193,8 @@ class S2AGService():
         limit = 1000
 
         next = True
-
+        if article_doi.startswith("10.48550/arXiv."):
+            article_doi=article_doi.replace("10.48550/arXiv.", "ARXIV:")
         while next:
             
             outbound_citations_url = "https://api.semanticscholar.org/graph/v1/paper/" + article_doi + "/references?fields=externalIds,citationCount&limit=" + str(limit) + "&offset=" + str(offset)
@@ -239,3 +243,81 @@ class S2AGService():
                 next = False
                 
         return outbound_citation_article_dois
+    def get_multiple_articles_batch(self, article_dois, results):
+        article_bundles = []
+
+        retry_count = 0
+        for doi in article_dois:
+            if doi.startswith("10.48550/arXiv."):
+                doi = doi.replace("10.48550/arXiv.", "ARXIV:")
+        while True:
+
+            s2ag_article_details_response = requests.post(
+                    'https://api.semanticscholar.org/graph/v1/paper/batch',
+                    params={'fields': 'externalIds,url,title,abstract,venue,year,referenceCount,citationCount,influentialCitationCount,isOpenAccess,openAccessPdf,fieldsOfStudy,publicationVenue,publicationTypes,publicationDate,journal,authors.url,authors.name,authors.aliases,authors.affiliations,authors.homepage,authors.paperCount,authors.citationCount,authors.hIndex'},
+                    json={"ids": article_dois},
+                    headers={'x-api-key': os.environ.get('S2AG_API_KEY')})
+
+            article_dict = {}
+
+            if s2ag_article_details_response.status_code != 200:
+                status = s2ag_article_details_response.status_code
+                print("S2AG API returned status code {status_code} for DOI {doi}".format(status_code=status, doi=doi))
+                if retry_count < 5:
+                    retry_count += 1
+                    continue
+                else:
+                    return s2ag_article_details_response.status_code
+
+            s2ag_article_details_response_dict = json.loads(s2ag_article_details_response.text)
+
+            for article in s2ag_article_details_response_dict:
+                if "DOI" in article["externalIds"].keys():
+                    DOI = article["externalIds"]["DOI"]
+                else:
+                    if "ArXiv" in article["externalIds"].keys():
+                        DOI = "10.48550/arXiv." + article["externalIds"]["ArXiv"]
+                    else:
+                        continue
+                article_dict["doi"] = DOI
+                # article_dict["external_ids"] = {}
+                # for external_id_type in s2ag_article_details_response_dict["externalIds"].keys():
+                #     if external_id_type != "DOI":
+                #         article_dict["external_ids"][external_id_type] = s2ag_article_details_response_dict["externalIds"][external_id_type]
+                article_dict["s2ag_url"] = article["url"]
+                article_dict["title"] = article["title"]
+                article_dict["abstract"] = article["abstract"]
+                article_dict["venue"] = article["venue"]
+                article_dict["year"] = article["year"]
+                article_dict["citation_count"] = article["referenceCount"]
+                article_dict["reference_count"] = article["citationCount"]
+                article_dict["s2ag_influential_inbound_citation_count"] = article[
+                    "influentialCitationCount"]
+                article_dict["is_open_access"] = article["isOpenAccess"]
+                if article_dict["is_open_access"]:
+                    article_dict["open_access_pdf"] = article["openAccessPdf"]["url"]
+                article_dict["fields_of_study"] = article["fieldsOfStudy"]
+                # article_dict["publication_venue"] = s2ag_article_details_response_dict["publicationVenue"]
+                article_dict["publication_types"] = article["publicationTypes"]
+                article_dict["publication_date"] = article["publicationDate"]
+                # article_dict["journal"] = s2ag_article_details_response_dict["journal"]
+                article_dict["authors"] = [author_dict["name"] for author_dict in article["authors"] if author_dict.get("authorId") is not None]
+                article_bundle = Article(**article_dict)
+                article_bundles.append(article_bundle)
+
+            results.extend(article_bundles)
+            return
+    def get_multiple_articles(self, dois):
+        thread_count = int(len(dois) / 100) + 1
+        print("Thread count: {thread_count}".format(thread_count=thread_count))
+
+        threads = []
+        results = []
+        for i in range(thread_count):
+            thread = threading.Thread(target=self.get_multiple_articles_batch, args=(dois[i * 100: (i + 1) * 100], results))
+            threads.append(thread)
+            thread.start()
+        for thread in threads:
+            thread.join()
+        print(results)
+        return results
