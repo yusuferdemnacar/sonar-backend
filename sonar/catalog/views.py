@@ -667,6 +667,7 @@ def get_extension_articles_of_catalog_base(request):
     user = request.user
     catalog_base_name = request.query_params.get('catalog_base_name', None)
     catalog_extension_name = request.query_params.get('catalog_extension_name', None)
+    options = request.query_params.get('options', '').split(',')
     fields = {
         'catalog_name': catalog_base_name,
         'catalog_extension_name': catalog_extension_name
@@ -690,22 +691,26 @@ def get_extension_articles_of_catalog_base(request):
 
     base_articles = catalog_service.get_base_articles(user.username, catalog_base_name)
 
-    inbound_citation_count = 0
-    for article in base_articles:
-        inbound_citation_count += article["inbound_citation_count"]
+    if 'inbound' in options:
+        inbound_citation_count = 0
+        for article in base_articles:
+            inbound_citation_count += article["inbound_citation_count"]
 
-    if inbound_citation_count > 1000:
-        return Response({'error': 'too many inbound citations'}, status=status.HTTP_400_BAD_REQUEST)
+        if inbound_citation_count > 1000:
+            return Response({'error': 'too many inbound citations'}, status=status.HTTP_400_BAD_REQUEST)
 
     base_article_dois = [article["doi"] for article in base_articles]
-    inbound_citation_article_dois = s2ag_service.get_inbound_citation_article_dois(base_article_dois)
-
-    outbound_citation_article_dois = s2ag_service.get_outbound_citation_article_dois(base_article_dois)
+    inbound_citation_article_dois = []
+    if 'inbound' in options:
+        inbound_citation_article_dois = s2ag_service.get_inbound_citation_article_dois(base_article_dois)
+    outbound_citation_article_dois = []
+    if 'outbound' in options:
+        outbound_citation_article_dois = s2ag_service.get_outbound_citation_article_dois(base_article_dois)
 
     new_article_dois = set(inbound_citation_article_dois + outbound_citation_article_dois)
 
     new_article_dois = new_article_dois - set(base_article_dois)
 
-    new_article_bundles = s2ag_service.get_articles(new_article_dois)
+    new_article_bundles = s2ag_service.get_multiple_articles(list(new_article_dois))
 
     return Response(new_article_bundles, status=status.HTTP_200_OK)
