@@ -26,9 +26,9 @@ class ProjectionService():
                 tx.run(remove_graph_query)
 
     def _create_named_graph(tx, username, catalog_base_name, catalog_extension_name=None, graph_type=None):
-
-        if catalog_extension_name is None:
-
+        print(catalog_extension_name)
+        if catalog_extension_name is None or catalog_extension_name =='':
+            print("here")
             if graph_type == ('Article', 'CITES'):
 
                 named_graph_query = """CALL gds.graph.project.cypher('{username}/{catalog_base_name}',
