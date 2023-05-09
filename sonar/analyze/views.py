@@ -33,7 +33,8 @@ class CentralityView(APIView):
         edge_type = request.query_params.get('edge_type', None)
         catalog_base_name = request.query_params.get('catalog_base_name', None)
         catalog_extension_name = request.query_params.get('catalog_extension_name', None)
-
+        if catalog_extension_name == '':
+            catalog_extension_name = None
         mandatory_fields = {
             'node_type': node_type,
             'edge_type': edge_type,
@@ -71,13 +72,26 @@ class CentralityView(APIView):
             if not catalog_extension_exists:
                 return Response({'error': 'catalog extension not found'}, status=status.HTTP_404_NOT_FOUND)
         
-        score = self.centrality_service.calculate_centrality(user.username, catalog_base_name, catalog_extension_name, (node_type, edge_type), score_function)
+        scores = self.centrality_service.calculate_centrality(user.username, catalog_base_name, catalog_extension_name, (node_type, edge_type), score_function)
 
         if score_function == self.centrality_service.betweenness_centrality and homogenous_graph_types[(node_type, edge_type)] == "UNDIRECTED":
-            for result in score:
+            for result in scores:
                 result["betweenness_centrality_score"] /= 2
 
-        return Response(score, status=status.HTTP_200_OK)
+        for score in scores:
+            if node_type == "Article":
+                score['Article'] = {'doi': score['Article']['doi'],
+                         'title': score['Article'].get('title', None),
+                         'abstract': score['Article'].get('abstract', None),
+                         'year': score['Article'].get('year', None),
+                         'citation_count': score['Article'].get('inbound_citation_count', None),
+                         'reference_count': score['Article'].get('outbound_citation_count', None),
+                         'fields_of_study': score['Article'].get('fields_of_study', None),
+                         'publication_types': score['Article'].get('publication_types', None),
+                         'publication_date': score['Article'].get('publication_date', None, ),
+                         }
+
+        return Response(scores, status=status.HTTP_200_OK)
 
 class BetweennessCentralityView(CentralityView):
 
