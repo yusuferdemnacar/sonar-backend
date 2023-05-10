@@ -45,7 +45,7 @@ class ProjectionService():
                     MATCH (a:Article), (c:Article)
                     WHERE ((a)-[:IN]->(cb)) AND ((c)-[:IN]->(cb))
                     WITH a, c
-                    MATCH (a)-[r:CITES]-(c)
+                    MATCH (a)-[r:CITES]->(c)
                     RETURN DISTINCT id(a) AS source, id(c) AS target, type(r) AS type')
                 """.format(username=username, catalog_base_name=catalog_base_name)
 
@@ -118,7 +118,7 @@ class ProjectionService():
                     MATCH (a:Article), (c:Article)
                     WHERE ((a)-[:IN]->(cb) OR (a)-[:IN]->(ce)) AND ((c)-[:IN]->(cb) OR (c)-[:IN]->(ce))
                     WITH a, c
-                    MATCH (a)-[r:CITES]-(c)
+                    MATCH (a)-[r:CITES]->(c)
                     RETURN DISTINCT id(a) AS source, id(c) AS target, type(r) AS type')
                 """.format(username=username, catalog_base_name=catalog_base_name, catalog_extension_name=catalog_extension_name)
 
@@ -187,7 +187,7 @@ class ProjectionService():
                     MATCH (a:Article), (c:Article)
                     WHERE ((a)-[:IN]->(cb)) AND ((c)-[:IN]->(cb)) AND date(a.publication_date) >= date("{start_date}") AND date(a.publication_date) <= date("{end_date}") AND date(c.publication_date) >= date("{start_date}") AND date(c.publication_date) <= date("{end_date}")
                     WITH a, c
-                    MATCH (a)-[r:CITES]-(c)
+                    MATCH (a)-[r:CITES]->(c)
                     RETURN DISTINCT id(a) AS source, id(c) AS target, type(r) AS type')
                 """.format(username=username, catalog_base_name=catalog_base_name, start_date=start_date, end_date=end_date)
 
@@ -260,7 +260,7 @@ class ProjectionService():
                     MATCH (a:Article), (c:Article)
                     WHERE ((a)-[:IN]->(cb) OR (a)-[:IN]->(ce)) AND ((c)-[:IN]->(cb) OR (c)-[:IN]->(ce)) AND date(a.publication_date) >= date("{start_date}") AND date(a.publication_date) <= date("{end_date}") AND date(c.publication_date) >= date("{start_date}") AND date(c.publication_date) <= date("{end_date}")
                     WITH a, c
-                    MATCH (a)-[r:CITES]-(c)
+                    MATCH (a)-[r:CITES]->(c)
                     RETURN DISTINCT id(a) AS source, id(c) AS target, type(r) AS type')
                 """.format(username=username, catalog_base_name=catalog_base_name, catalog_extension_name=catalog_extension_name, start_date=start_date, end_date=end_date)
 
