@@ -9,4 +9,11 @@ urlpatterns = [
     path("centrality/pagerank/", PageRankView.as_view(), name="pagerank"),
     path("centrality/articlerank/", ArticleRankView.as_view(), name="articlerank"),
     path("centrality/harmonic/", HarmonicCentralityView.as_view(), name="harmonic_centrality"),
+    path("time_series_centrality/betweenness/", TimeSeriesBetweennessCentralityView.as_view(), name="time_series_betweenness_centrality"),
+    path("time_series_centrality/closeness/", TimeSeriesClosenessCentralityView.as_view(), name="time_series_closeness_centrality"),
+    path("time_series_centrality/eigenvector/", TimeSeriesEigenvectorCentralityView.as_view(), name="time_series_eigenvector_centrality"),
+    path("time_series_centrality/degree/", TimeSeriesDegreeCentralityView.as_view(), name="time_series_degree_centrality"),
+    path("time_series_centrality/pagerank/", TimeSeriesPageRankView.as_view(), name="time_series_pagerank"),
+    path("time_series_centrality/articlerank/", TimeSeriesArticleRankView.as_view(), name="time_series_articlerank"),
+    path("time_series_centrality/harmonic/", TimeSeriesHarmonicCentralityView.as_view(), name="time_series_harmonic_centrality"),
 ]
