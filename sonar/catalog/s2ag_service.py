@@ -108,7 +108,7 @@ class S2AGService():
                 if rdb_outbound_citations is not None:
                     rdb_outbound_citations += rdb_outbound_citations
 
-        Citation.objects.bulk_create(rdb_outbound_citations)
+        Citation.objects.bulk_create(rdb_outbound_citations, ignore_conflicts=True)
 
         return article_bundles
     
