@@ -11,6 +11,9 @@ from graph.models import Citation
 class S2AGService():
 
     def get_article(self, doi):
+
+        #TODO: Tell the users which articles were not found in S2AG API
+
         print("Getting article details from S2AG API for DOI {doi}".format(doi=doi))
         article_bundle = {}
 
@@ -23,14 +26,18 @@ class S2AGService():
             s2ag_article_details_response = requests.get(s2ag_article_details_url, headers = {'x-api-key':os.environ.get('S2AG_API_KEY')})
             article_dict = {}
 
-            if s2ag_article_details_response.status_code != 200:
+            if s2ag_article_details_response.status_code == 404:
+                print("DOI {doi} not found in S2AG API".format(doi=doi))
+                return None, None
+            
+            if s2ag_article_details_response.status_code == 429:
                 status = s2ag_article_details_response.status_code
                 print("S2AG API returned status code {status_code} for DOI {doi}".format(status_code=status, doi=doi))
-                if retry_count < 5:
+                if retry_count < 100:
                     retry_count += 1
                     continue
                 else:
-                    return s2ag_article_details_response.status_code
+                    return None, None
 
             s2ag_article_details_response_dict = json.loads(s2ag_article_details_response.text)
 
@@ -49,8 +56,6 @@ class S2AGService():
                 outbound_citation_article_dois.append(outbound_citation_article["doi"])
                 if outbound_citation_article["inbound_citation_count"] > 10000:
                     rdb_outbound_citations.append(Citation(citing_article_doi=doi, cited_article_doi=outbound_citation_article["doi"]))
-
-            Citation.objects.bulk_create(rdb_outbound_citations, ignore_conflicts=True)
 
             article_dict["doi"] = doi
             # article_dict["external_ids"] = {}
@@ -87,18 +92,23 @@ class S2AGService():
             ) for author_dict in s2ag_article_details_response_dict["authors"] if author_dict.get("authorId") is not None]
             article_bundle = {"article": Article(**article_dict), "authors": authors, "outbound_citation_dois": outbound_citation_article_dois, "inbound_citation_dois": inbound_citation_article_dois}
 
-            return article_bundle
+            return rdb_outbound_citations, article_bundle
 
     def get_articles(self, dois):
 
-        # call get_article for each doi in dois using threading to speed up the process
-        # use total of 10 threads to call get_article
-        # return a list of article bundles
-
         article_bundles = []
+        rdb_outbound_citations = []
 
         with ThreadPool(100) as pool:
-            article_bundles = pool.map(self.get_article, dois)
+            for rdb_outbound_citations, article_bundle in pool.map(self.get_article, dois):
+                
+                if article_bundle is not None:
+                    article_bundles.append(article_bundle)
+
+                if rdb_outbound_citations is not None:
+                    rdb_outbound_citations += rdb_outbound_citations
+
+        Citation.objects.bulk_create(rdb_outbound_citations)
 
         return article_bundles
     
@@ -128,7 +138,7 @@ class S2AGService():
             article_doi=article_doi.replace("10.48550/arXiv.", "ARXIV:")
         while next:
 
-            print(offset, limit)
+            #print(offset, limit)
             inbound_citations_url = "https://api.semanticscholar.org/graph/v1/paper/" + article_doi + "/citations?fields=externalIds&limit=" + str(limit) + "&offset=" + str(offset)
             response = requests.get(inbound_citations_url, headers = {'x-api-key':os.environ.get('S2AG_API_KEY')})
 
@@ -168,7 +178,7 @@ class S2AGService():
             else:
                 next = False
 
-            print(next)
+            #print(next)
 
         return inbound_citation_article_dois
     

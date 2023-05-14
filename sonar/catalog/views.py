@@ -101,10 +101,11 @@ class CatalogBaseView(APIView):
 
         if edit_type == "add_article":
 
-            article_doi = request.data.get('article_doi', None)
+            article_dois = request.data.getlist('article_doi', None)
+            article_dois = list(set(article_dois))
 
             fields = {
-                'article_doi': article_doi
+                'article_doi': article_dois
             }
 
             validation_result = self.request_validator.validate(fields)
@@ -114,44 +115,42 @@ class CatalogBaseView(APIView):
             
             t = time.time()
             start = time.time()
-
-            article_in_base = self.catalog_service.check_if_article_in_base(user.username, catalog_base_name, article_doi)
-
-            print("article in base: ", time.time() - t)
-            t = time.time()
-
-            if article_in_base:
-
-                return Response({'error': 'article_doi: ' + article_doi + ' already in catalog base: ' + catalog_base_name}, status=status.HTTP_400_BAD_REQUEST)
-
-            print("get articles: ", time.time() - t)
-            t = time.time()
             
-            existing_articles = self.catalog_service.get_existing_articles([article_doi])
+            existing_articles = self.catalog_service.get_existing_articles(article_dois)
+
+            for article in existing_articles:
+
+                print("existing article: ", article["doi"])
+
+            non_existing_article_dois = [article_doi for article_doi in article_dois if article_doi not in [article["doi"] for article in existing_articles]]
+
+            for article_doi in non_existing_article_dois:
+
+                print("non existing article: ", article_doi)
 
             print("existing articles: ", time.time() - t)
             t = time.time()
 
-            if not existing_articles:
+            if non_existing_article_dois:
 
-                article_result = self.s2ag_service.get_articles([article_doi])
+                article_result = self.s2ag_service.get_articles(non_existing_article_dois)
 
-                if type(article_result) is int:
-                    return Response({'error': 'Error while getting article from external source'}, status=status.HTTP_502_BAD_GATEWAY)
+                print("get articles: ", time.time() - t)
+                t = time.time()
 
                 self.catalog_service.create_article_patterns(article_result)
 
                 print("create article pattern: ", time.time() - t)
                 t = time.time()
             
-            self.catalog_service.add_articles_to_base(user.username, catalog_base_name, [article_doi])
+            self.catalog_service.add_articles_to_base(user.username, catalog_base_name, article_dois)
 
             print("add article to base: ", time.time() - t)
             t = time.time()
 
             print("total: ", time.time() - start)
 
-            return Response({"info": "article with doi: " + article_doi + " added to catalog base: " + catalog_base_name}, status=status.HTTP_200_OK)
+            return Response({"info": "articles added to catalog base: " + catalog_base_name}, status=status.HTTP_200_OK)
 
         if edit_type == "remove_article":
 
