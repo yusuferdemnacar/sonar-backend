@@ -23,9 +23,8 @@ class CatalogService():
     def create_base_node(self, username: str, catalog_base_name: str):
             
         query = """
-            MERGE (cb:CatalogBase {name: $catalog_base_name})
-            MERGE (u:User {username: $username})
-            MERGE (cb)-[:OWNED_BY]->(u)
+            MATCH (u:User {username: $username})
+            MERGE (cb:CatalogBase {name: $catalog_base_name})-[:OWNED_BY]->(u)
         """
 
         self.neo4j_client.run(query, parameters={"catalog_base_name": catalog_base_name, "username": username})
@@ -52,8 +51,7 @@ class CatalogService():
 
         query = """
             MATCH (cb:CatalogBase {name: $catalog_base_name})-[:OWNED_BY]->(u:User {username: $username})
-            MERGE (ce:CatalogExtension {name: $catalog_extension_name})
-            MERGE (ce)-[:EXTENDS]->(cb)
+            MERGE (ce:CatalogExtension {name: $catalog_extension_name})-[:EXTENDS]->(cb)
         """
 
         self.neo4j_client.run(query, parameters={"catalog_base_name": catalog_base_name, "username": username, "catalog_extension_name": catalog_extension_name})
