@@ -46,7 +46,7 @@ class ProjectionService():
                     WHERE ((a)-[:IN]->(cb)) AND ((c)-[:IN]->(cb))
                     WITH a, c
                     MATCH (a)-[r:CITES]->(c)
-                    RETURN DISTINCT id(a) AS source, id(c) AS target, type(r) AS type')
+                    RETURN DISTINCT id(a) AS source, id(c) AS target')
                 """.format(username=username, catalog_base_name=catalog_base_name)
 
                 tx.run(named_graph_query)
@@ -94,7 +94,7 @@ class ProjectionService():
                     WHERE (a)-[:IN]->(cb)
                     WITH au1, au2
                     MATCH (au1)-[r:COAUTHOR_OF]-(au2)
-                    RETURN DISTINCT id(au1) AS source, id(au2) AS target, type(r) AS type, r.weight AS weight')
+                    RETURN DISTINCT id(au1) AS source, id(au2) AS target, r.weight AS weight')
                 """.format(username=username, catalog_base_name=catalog_base_name)
 
                 tx.run(weight_assignment_query)
@@ -119,7 +119,7 @@ class ProjectionService():
                     WHERE ((a)-[:IN]->(cb) OR (a)-[:IN]->(ce)) AND ((c)-[:IN]->(cb) OR (c)-[:IN]->(ce))
                     WITH a, c
                     MATCH (a)-[r:CITES]->(c)
-                    RETURN DISTINCT id(a) AS source, id(c) AS target, type(r) AS type')
+                    RETURN DISTINCT id(a) AS source, id(c) AS target')
                 """.format(username=username, catalog_base_name=catalog_base_name, catalog_extension_name=catalog_extension_name)
 
                 tx.run(named_graph_query)
@@ -161,7 +161,7 @@ class ProjectionService():
                     WHERE ((au1)<-[:AUTHORED_BY]-(:Article)-[:IN]->(cb) OR (au1)<-[:AUTHORED_BY]-(:Article)-[:IN]->(ce)) AND ((au2)<-[:AUTHORED_BY]-(:Article)-[:IN]->(cb) OR (au2)<-[:AUTHORED_BY]-(:Article)-[:IN]->(ce))
                     WITH au1, au2
                     MATCH (au1)-[r:COAUTHOR_OF]-(au2)
-                    RETURN DISTINCT id(au1) AS source, id(au2) AS target, type(r) AS type, r.weight AS weight')
+                    RETURN DISTINCT id(au1) AS source, id(au2) AS target, r.weight AS weight')
                 """.format(username=username, catalog_base_name=catalog_base_name, catalog_extension_name=catalog_extension_name)
 
                 tx.run(weight_assignment_query)
@@ -188,7 +188,7 @@ class ProjectionService():
                     WHERE ((a)-[:IN]->(cb)) AND ((c)-[:IN]->(cb)) AND date(a.publication_date) >= date("{start_date}") AND date(a.publication_date) <= date("{end_date}") AND date(c.publication_date) >= date("{start_date}") AND date(c.publication_date) <= date("{end_date}")
                     WITH a, c
                     MATCH (a)-[r:CITES]->(c)
-                    RETURN DISTINCT id(a) AS source, id(c) AS target, type(r) AS type')
+                    RETURN DISTINCT id(a) AS source, id(c) AS target')
                 """.format(username=username, catalog_base_name=catalog_base_name, start_date=start_date, end_date=end_date)
 
                 tx.run(named_graph_query)
@@ -236,7 +236,7 @@ class ProjectionService():
                     WHERE (a)-[:IN]->(cb) AND date(a.publication_date) >= date("{start_date}") AND date(a.publication_date) <= date("{end_date}")
                     WITH au1, au2
                     MATCH (au1)-[r:COAUTHOR_OF]-(au2)
-                    RETURN DISTINCT id(au1) AS source, id(au2) AS target, type(r) AS type, r.weight AS weight')
+                    RETURN DISTINCT id(au1) AS source, id(au2) AS target, r.weight AS weight')
                 """.format(username=username, catalog_base_name=catalog_base_name, start_date=start_date, end_date=end_date)
 
                 tx.run(weight_assignment_query)
@@ -261,7 +261,7 @@ class ProjectionService():
                     WHERE ((a)-[:IN]->(cb) OR (a)-[:IN]->(ce)) AND ((c)-[:IN]->(cb) OR (c)-[:IN]->(ce)) AND date(a.publication_date) >= date("{start_date}") AND date(a.publication_date) <= date("{end_date}") AND date(c.publication_date) >= date("{start_date}") AND date(c.publication_date) <= date("{end_date}")
                     WITH a, c
                     MATCH (a)-[r:CITES]->(c)
-                    RETURN DISTINCT id(a) AS source, id(c) AS target, type(r) AS type')
+                    RETURN DISTINCT id(a) AS source, id(c) AS target')
                 """.format(username=username, catalog_base_name=catalog_base_name, catalog_extension_name=catalog_extension_name, start_date=start_date, end_date=end_date)
 
                 tx.run(named_graph_query)
@@ -305,7 +305,7 @@ class ProjectionService():
                     WHERE ((a)-[:IN]->(cb) OR (a)-[:IN]->(ce)) AND date(a.publication_date) >= date("{start_date}") AND date(a.publication_date) <= date("{end_date}")
                     WITH au1, au2
                     MATCH (au1)-[r:COAUTHOR_OF]-(au2)
-                    RETURN DISTINCT id(au1) AS source, id(au2) AS target, type(r) AS type, r.weight AS weight')
+                    RETURN DISTINCT id(au1) AS source, id(au2) AS target, r.weight AS weight')
                 """.format(username=username, catalog_base_name=catalog_base_name, catalog_extension_name=catalog_extension_name, start_date=start_date, end_date=end_date)
 
                 tx.run(weight_assignment_query)

@@ -46,7 +46,7 @@ class CatalogService():
             DETACH DELETE ce
         """
 
-        self.neo4j_client.run(query, parameters={"catalog_extension_name": catalog_extension_name, "username": username})
+        self.neo4j_client.run(query, parameters={catalog_base_name: catalog_base_name, "username": username, "catalog_extension_name": catalog_extension_name})
 
     def create_extension_node(self, username: str, catalog_base_name: str, catalog_extension_name: str):
 
