@@ -3,6 +3,7 @@ from article.schemas import Article
 from author.schemas import Author
 from catalog.schemas import CatalogBase
 from neo4j_client import Neo4jClient
+import time
 
 class UserService():
 
@@ -130,8 +131,12 @@ class CatalogService():
 
         with self.neo4j_client.driver.session().begin_transaction() as tx:
 
+            t = time.time()
             tx.run(article_creation_query, parameters={"article_bundles": article_bundles})
+            print("Article creation took: ", time.time() - t)
+            t = time.time()
             tx.run(author_creation_query, parameters={"article_bundles": article_bundles})
+            print("Author creation took: ", time.time() - t)
             
     def create_author_node(self, author: Author):
         

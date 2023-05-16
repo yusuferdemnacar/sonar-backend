@@ -16,4 +16,11 @@ urlpatterns = [
     path("time_series_centrality/pagerank/", TimeSeriesPageRankView.as_view(), name="time_series_pagerank"),
     path("time_series_centrality/articlerank/", TimeSeriesArticleRankView.as_view(), name="time_series_articlerank"),
     path("time_series_centrality/harmonic/", TimeSeriesHarmonicCentralityView.as_view(), name="time_series_harmonic_centrality"),
+    path("diff_time_series_centrality/betweenness/", DiffTimeSeriesBetweennessCentralityView.as_view(), name="diff_time_series_betweenness_centrality"),
+    path("diff_time_series_centrality/closeness/", DiffTimeSeriesClosenessCentralityView.as_view(), name="diff_time_series_closeness_centrality"),
+    path("diff_time_series_centrality/eigenvector/", DiffTimeSeriesEigenvectorCentralityView.as_view(), name="diff_time_series_eigenvector_centrality"),
+    path("diff_time_series_centrality/degree/", DiffTimeSeriesDegreeCentralityView.as_view(), name="diff_time_series_degree_centrality"),
+    path("diff_time_series_centrality/pagerank/", DiffTimeSeriesPageRankView.as_view(), name="diff_time_series_pagerank"),
+    path("diff_time_series_centrality/articlerank/", DiffTimeSeriesArticleRankView.as_view(), name="diff_time_series_articlerank"),
+    path("diff_time_series_centrality/harmonic/", DiffTimeSeriesHarmonicCentralityView.as_view(), name="diff_time_series_harmonic_centrality"),
 ]

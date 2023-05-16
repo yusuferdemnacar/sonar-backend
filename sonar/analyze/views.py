@@ -7,6 +7,8 @@ from neo4j_client import Neo4jClient
 from graph.graph_service import CatalogService
 from .analysis_service import CentralityService, TimeSeriesCentralityService
 
+from datetime import datetime
+
 class RequestValidator():
 
     def validate(self, required_fields):
@@ -202,47 +204,129 @@ class TimeSeriesCentralityView(CentralityView):
                 for result in scores[end_date]:
                     result["betweenness_centrality_score"] /= 2
 
-        return Response(scores, status=status.HTTP_200_OK)
+        return scores
     
 class TimeSeriesBetweennessCentralityView(TimeSeriesCentralityView):
 
     def get(self, request):
 
-        return super().get_scores(request, TimeSeriesCentralityService.betweenness_centrality)
+        return Response(super().get_scores(request, TimeSeriesCentralityService.betweenness_centrality), status=status.HTTP_200_OK)
     
 class TimeSeriesClosenessCentralityView(TimeSeriesCentralityView):
 
     def get(self, request):
 
-        return super().get_scores(request, TimeSeriesCentralityService.closeness_centrality)
+        return Response(super().get_scores(request, TimeSeriesCentralityService.closeness_centrality), status=status.HTTP_200_OK)
     
 class TimeSeriesEigenvectorCentralityView(TimeSeriesCentralityView):
 
     def get(self, request):
 
-        return super().get_scores(request, TimeSeriesCentralityService.eigenvector_centrality)
+        return Response(super().get_scores(request, TimeSeriesCentralityService.eigenvector_centrality), status=status.HTTP_200_OK)
     
 class TimeSeriesDegreeCentralityView(TimeSeriesCentralityView):
 
     def get(self, request):
 
-        return super().get_scores(request, TimeSeriesCentralityService.degree_centrality)
+        return Response(super().get_scores(request, TimeSeriesCentralityService.degree_centrality), status=status.HTTP_200_OK)
     
 class TimeSeriesPageRankView(TimeSeriesCentralityView):
 
     def get(self, request):
 
-        return super().get_scores(request, TimeSeriesCentralityService.page_rank)
+        return Response(super().get_scores(request, TimeSeriesCentralityService.page_rank), status=status.HTTP_200_OK)
     
 class TimeSeriesArticleRankView(TimeSeriesCentralityView):
 
     def get(self, request):
 
-        return super().get_scores(request, TimeSeriesCentralityService.article_rank)
+        return Response(super().get_scores(request, TimeSeriesCentralityService.article_rank), status=status.HTTP_200_OK)
     
 class TimeSeriesHarmonicCentralityView(TimeSeriesCentralityView):
 
     def get(self, request):
 
-        return super().get_scores(request, TimeSeriesCentralityService.harmonic_centrality)
+        return Response(super().get_scores(request, TimeSeriesCentralityService.harmonic_centrality), status=status.HTTP_200_OK)
+
+class DiffTimeSeriesCentralityView(TimeSeriesCentralityView):
+
+    def __init__(self):
+            
+        super().__init__()
+
+    def get_scores(self, request, score_function):
+
+        return super().get_scores(request, score_function)
     
+    def get_differetial_scores(self, request, score_function):
+
+        scores = self.get_scores(request, score_function)
+
+        differential_scores = {}
+
+        sorted_dates = sorted([datetime.strftime(datetime.strptime(date, '%Y-%m-%d').date(), '%Y-%m-%d') for date in scores.keys()])
+
+        key_index = 0
+
+        for key in sorted_dates:
+            differential_scores[key] = []
+            for result in scores[key]:
+                score_type = ""
+                for result_key in result.keys():
+                    if "score" in result_key:
+                        score_type = result_key
+                doi = result['doi']
+                publication_date = result['publication_date']
+                old_score = 0
+                if doi in [score['doi'] for score in scores[sorted_dates[key_index - 1]]]:
+                    old_score = [score[score_type] for score in scores[sorted_dates[key_index - 1]] if score['doi'] == doi][0]
+                differential_scores[key].append({
+                    'doi': doi,
+                    'publication_date': publication_date,
+                    score_type: result[score_type] - old_score
+                })
+            key_index += 1
+
+        return differential_scores
+
+class DiffTimeSeriesBetweennessCentralityView(DiffTimeSeriesCentralityView):
+
+    def get(self, request):
+
+        return Response(super().get_differetial_scores(request, TimeSeriesCentralityService.betweenness_centrality), status=status.HTTP_200_OK)
+    
+class DiffTimeSeriesClosenessCentralityView(DiffTimeSeriesCentralityView):
+
+    def get(self, request):
+
+        return Response(super().get_differetial_scores(request, TimeSeriesCentralityService.closeness_centrality), status=status.HTTP_200_OK)
+    
+class DiffTimeSeriesEigenvectorCentralityView(DiffTimeSeriesCentralityView):
+
+    def get(self, request):
+
+        return Response(super().get_differetial_scores(request, TimeSeriesCentralityService.eigenvector_centrality), status=status.HTTP_200_OK)
+    
+class DiffTimeSeriesDegreeCentralityView(DiffTimeSeriesCentralityView):
+
+    def get(self, request):
+
+        return Response(super().get_differetial_scores(request, TimeSeriesCentralityService.degree_centrality), status=status.HTTP_200_OK)
+    
+class DiffTimeSeriesPageRankView(DiffTimeSeriesCentralityView):
+
+    def get(self, request):
+
+        return Response(super().get_differetial_scores(request, TimeSeriesCentralityService.page_rank), status=status.HTTP_200_OK)
+    
+class DiffTimeSeriesArticleRankView(DiffTimeSeriesCentralityView):
+
+    def get(self, request):
+
+        return Response(super().get_differetial_scores(request, TimeSeriesCentralityService.article_rank), status=status.HTTP_200_OK)
+    
+class DiffTimeSeriesHarmonicCentralityView(DiffTimeSeriesCentralityView):
+
+    def get(self, request):
+
+        return Response(super().get_differetial_scores(request, TimeSeriesCentralityService.harmonic_centrality), status=status.HTTP_200_OK)

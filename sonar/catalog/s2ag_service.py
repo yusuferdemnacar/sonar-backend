@@ -1,4 +1,5 @@
 import threading
+import time
 
 from article.schemas import Article
 from author.schemas import Author
@@ -14,7 +15,6 @@ class S2AGService():
 
         #TODO: Tell the users which articles were not found in S2AG API
 
-        print("Getting article details from S2AG API for DOI {doi}".format(doi=doi))
         article_bundle = {}
 
         retry_count = 0
@@ -23,21 +23,18 @@ class S2AGService():
         while True:
 
             s2ag_article_details_url = "https://api.semanticscholar.org/graph/v1/paper/{doi}?fields=externalIds,url,title,abstract,venue,year,referenceCount,citationCount,influentialCitationCount,isOpenAccess,openAccessPdf,fieldsOfStudy,publicationVenue,publicationTypes,publicationDate,journal,authors.url,authors.name,authors.aliases,authors.affiliations,authors.homepage,authors.paperCount,authors.citationCount,authors.hIndex".format(doi=doi)
-            s2ag_article_details_response = requests.get(s2ag_article_details_url, headers = {'x-api-key':os.environ.get('S2AG_API_KEY')})
-            article_dict = {}
-
-            if s2ag_article_details_response.status_code == 404:
-                print("DOI {doi} not found in S2AG API".format(doi=doi))
+            with requests.session() as s:
+                s2ag_article_details_response = s.get(s2ag_article_details_url, headers = {'x-api-key':os.environ.get('S2AG_API_KEY')})
+                article_dict = {}
+                
+            if s2ag_article_details_response.status_code == 429:
+                print("S2AG API returned status code {status_code} for DOI {doi}".format(status_code=s2ag_article_details_response.status_code, doi=doi))
+                continue
+                
+            if s2ag_article_details_response.status_code != 200:
                 return None, None
             
-            if s2ag_article_details_response.status_code == 429:
-                status = s2ag_article_details_response.status_code
-                print("S2AG API returned status code {status_code} for DOI {doi}".format(status_code=status, doi=doi))
-                if retry_count < 100:
-                    retry_count += 1
-                    continue
-                else:
-                    return None, None
+            print("S2AG API returned status code {status_code} for DOI {doi}".format(status_code=s2ag_article_details_response.status_code, doi=doi))
 
             s2ag_article_details_response_dict = json.loads(s2ag_article_details_response.text)
 
@@ -99,14 +96,22 @@ class S2AGService():
         article_bundles = []
         rdb_outbound_citations = []
 
-        with ThreadPool(100) as pool:
+        with ThreadPool(200) as pool:
+
+            i = 0
+            
             for rdb_outbound_citations, article_bundle in pool.map(self.get_article, dois):
+
+                print("Article {i} of {n}".format(i=i, n=len(dois)))
+                i += 1
                 
                 if article_bundle is not None:
                     article_bundles.append(article_bundle)
 
                 if rdb_outbound_citations is not None:
                     rdb_outbound_citations += rdb_outbound_citations
+
+        print("Number of articles: {number_of_articles}".format(number_of_articles=len(article_bundles)))
 
         Citation.objects.bulk_create(rdb_outbound_citations, ignore_conflicts=True)
 
