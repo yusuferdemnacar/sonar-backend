@@ -7,7 +7,7 @@ from neo4j_client import Neo4jClient
 from graph.graph_service import CatalogService
 from .analysis_service import CentralityService, TimeSeriesCentralityService
 
-from datetime import datetime
+from datetime import datetime, timedelta
 
 class RequestValidator():
 
@@ -189,12 +189,33 @@ class TimeSeriesCentralityView(CentralityView):
         if not catalog_base_exists:
             return Response({'error': 'catalog base not found'}, status=status.HTTP_404_NOT_FOUND)
         
+        catalog_base_articles = self.catalog_service.get_base_articles(user.username, catalog_base_name)
+        catalog_publication_dates = [article['publication_date'] for article in catalog_base_articles]
+        
         if catalog_extension_name:
 
             catalog_extension_exists = self.catalog_service.check_if_extension_exists(user.username, catalog_base_name, catalog_extension_name)
         
             if not catalog_extension_exists:
                 return Response({'error': 'catalog extension not found'}, status=status.HTTP_404_NOT_FOUND)
+            
+            catalog_extension_articles = self.catalog_service.get_extension_articles(user.username, catalog_base_name, catalog_extension_name)
+            catalog_publication_dates.extend([article['publication_date'] for article in catalog_extension_articles])
+
+        catalog_publication_dates = [datetime.strptime(date, '%Y-%m-%d').date() for date in catalog_publication_dates]
+        catalog_publication_dates = sorted(catalog_publication_dates)
+        time_series_start_date = datetime.strptime(time_series_start_date, '%Y-%m-%d').date()
+        time_series_end_date = datetime.strptime(time_series_end_date, '%Y-%m-%d').date()
+
+        if time_series_start_date < catalog_publication_dates[0]:
+            time_series_start_date = datetime.strftime(catalog_publication_dates[0], '%Y-%m-%d')
+        else:
+            time_series_start_date = datetime.strftime(time_series_start_date, '%Y-%m-%d')
+
+        if time_series_end_date > catalog_publication_dates[-1]:
+            time_series_end_date = datetime.strftime(catalog_publication_dates[-1] + timedelta(days=120), '%Y-%m-%d')
+        else:
+            time_series_end_date = datetime.strftime(time_series_end_date, '%Y-%m-%d')
             
         scores = self.centrality_service.calculate_centrality(user.username, catalog_base_name, catalog_extension_name, (node_type, edge_type), score_function, time_series_start_date, time_series_end_date)
 
