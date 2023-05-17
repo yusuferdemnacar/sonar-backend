@@ -21,6 +21,14 @@ class CatalogService():
     def __init__(self, neo4j_client: Neo4jClient):
         self.neo4j_client = neo4j_client
 
+    def _get_ids(tx, username, catalog_base_name, catalog_extension_name=None):
+
+        user_id = tx.run("""MATCH (u:User) WHERE u.username = "{username}" RETURN id(u) AS id""".format(username=username)).data()[0]['id']
+        catalog_base_id = tx.run("""MATCH (u:User)<-[:OWNED_BY]-(cb:CatalogBase) WHERE u.username = "{username}" AND cb.name = "{catalog_base_name}" RETURN id(cb) AS id""".format(username=username, catalog_base_name=catalog_base_name)).data()[0]['id']
+        catalog_extension_id = None if catalog_extension_name is None else tx.run("""MATCH (u:User)<-[:OWNED_BY]-(cb:CatalogBase)<-[:EXTENDS]-(ce:CatalogExtension) WHERE u.username = "{username}" AND cb.name = "{catalog_base_name}" AND ce.name = "{catalog_extension_name}" RETURN id(ce) AS id""".format(username=username, catalog_base_name=catalog_base_name, catalog_extension_name=catalog_extension_name)).data()[0]['id']
+
+        return user_id, catalog_base_id, catalog_extension_id
+
     def create_base_node(self, username: str, catalog_base_name: str):
             
         query = """
@@ -32,21 +40,23 @@ class CatalogService():
 
     def delete_base_node(self, username: str, catalog_base_name: str):
 
-        query = """
+        user_id, catalog_base_id, _ = CatalogService._get_ids(self.neo4j_client.driver.session(), username, catalog_base_name)
+
+        weight_name = 'weight_' + str(user_id) + '_' + str(catalog_base_id)
+
+        deletion_query = """
             MATCH (cb:CatalogBase {name: $catalog_base_name})-[:OWNED_BY]->(u:User {username: $username})
             DETACH DELETE cb
         """
 
-        self.neo4j_client.run(query, parameters={"catalog_base_name": catalog_base_name, "username": username})
+        weight_deletion_query = """
+            MATCH (au1:Author)-[c:COAUTHOR_OF]->(au2:Author)
+            WHERE c.{weight_name} IS NOT NULL
+            REMOVE c.{weight_name}
+        """.format(weight_name=weight_name)
 
-    def delete_extension_node(self, username: str, catalog_base_name: str, catalog_extension_name: str):
-
-        query = """
-            MATCH (ce:CatalogExtension {name: $catalog_extension_name})-[:EXTENDS]->(cb:CatalogBase {name: $catalog_base_name})-[:OWNED_BY]->(u:User {username: $username})
-            DETACH DELETE ce
-        """
-
-        self.neo4j_client.run(query, parameters={catalog_base_name: catalog_base_name, "username": username, "catalog_extension_name": catalog_extension_name})
+        self.neo4j_client.run(weight_deletion_query)
+        self.neo4j_client.run(deletion_query, parameters={"catalog_base_name": catalog_base_name, "username": username})
 
     def create_extension_node(self, username: str, catalog_base_name: str, catalog_extension_name: str):
 
@@ -56,6 +66,26 @@ class CatalogService():
         """
 
         self.neo4j_client.run(query, parameters={"catalog_base_name": catalog_base_name, "username": username, "catalog_extension_name": catalog_extension_name})
+    
+    def delete_extension_node(self, username: str, catalog_base_name: str, catalog_extension_name: str):
+
+        user_id, catalog_base_id, catalog_extension_id = CatalogService._get_ids(self.neo4j_client.driver.session(), username, catalog_base_name, catalog_extension_name)
+
+        weight_name = 'weight_' + str(user_id) + '_' + str(catalog_base_id) + '_' + str(catalog_extension_id)
+
+        deletion_query = """
+            MATCH (ce:CatalogExtension {name: $catalog_extension_name})-[:EXTENDS]->(cb:CatalogBase {name: $catalog_base_name})-[:OWNED_BY]->(u:User {username: $username})
+            DETACH DELETE ce
+        """
+
+        weight_deletion_query = """
+            MATCH (au1:Author)-[c:COAUTHOR_OF]->(au2:Author)
+            WHERE c.{weight_name} IS NOT NULL
+            REMOVE c.{weight_name}
+        """.format(weight_name=weight_name)
+
+        self.neo4j_client.run(weight_deletion_query)
+        self.neo4j_client.run(deletion_query, parameters={catalog_base_name: catalog_base_name, "username": username, "catalog_extension_name": catalog_extension_name})
 
     def create_article_patterns(self, article_bundles):
         
@@ -137,46 +167,122 @@ class CatalogService():
             t = time.time()
             tx.run(author_creation_query, parameters={"article_bundles": article_bundles})
             print("Author creation took: ", time.time() - t)
-            
-    def create_author_node(self, author: Author):
-        
-        query = """
-            MERGE (a:Author {s2ag_id: $author.s2ag_id})
-            SET a.name = $author.name,
-                a.s2ag_url = $author.s2ag_url,
-                a.aliases = $author.aliases,
-                a.affiliations = $author.affiliations,
-                a.homepage = $author.homepage,
-                a.paper_count = $author.paper_count,
-                a.citation_count = $author.citation_count,
-                a.h_index = $author.h_index
-        """
-
-        self.neo4j_client.run(query, parameters={"author_name": author["name"], "author": author})
 
     def add_articles_to_base(self, username, catalog_base_name, dois):
 
-        query = """
+        user_id, catalog_base_id, _ = CatalogService._get_ids(self.neo4j_client.driver.session(), username, catalog_base_name)
+
+        weight_name = 'weight_' + str(user_id) + '_' + str(catalog_base_id)
+
+        addition_query = """
             UNWIND $dois AS doi
             MATCH (a:Article), (cb:CatalogBase)-[o:OWNED_BY]->(u:User)
             WHERE a.doi = doi AND cb.name = $catalog_base_name AND u.username = $username
             MERGE (a)-[i:IN]->(cb)
         """
 
-        self.neo4j_client.run(query, parameters={"dois": dois, "catalog_base_name": catalog_base_name, "username": username})
+        coauthorship_weight_query = """
+            UNWIND $dois AS doi
+            MATCH (a:Article)
+            WHERE a.doi = doi
+            CALL {{
+                WITH a
+                MATCH (au1:Author)<-[:AUTHORED_BY]-(a)-[:AUTHORED_BY]->(au2:Author)
+                MATCH (au1)-[c:COAUTHOR_OF]->(au2)
+                WHERE c.{weight_name} IS NOT NULL
+                SET c.{weight_name} = c.{weight_name} + 1
+            }}
+            CALL {{
+                WITH a
+                MATCH (au1:Author)<-[:AUTHORED_BY]-(a)-[:AUTHORED_BY]->(au2:Author)
+                MATCH (au1)-[c:COAUTHOR_OF]->(au2)
+                WHERE c.{weight_name} IS NULL
+                SET c.{weight_name} = 1
+            }}
+        """.format(weight_name=weight_name)
+
+        catalog_extension_ids = self.get_extension_ids_of_catalog_base(username, catalog_base_name)
+
+        for catalog_extension_id in catalog_extension_ids:
+            extension_weight_name = 'weight_' + str(user_id) + '_' + str(catalog_base_id) + '_' + str(catalog_extension_id)
+            extension_coauthorship_weight_query = """
+                UNWIND $dois AS doi
+                MATCH (a:Article)
+                WHERE a.doi = doi
+                CALL {{
+                    WITH a
+                    MATCH (au1:Author)<-[:AUTHORED_BY]-(a)-[:AUTHORED_BY]->(au2:Author)
+                    MATCH (au1)-[c:COAUTHOR_OF]->(au2)
+                    WHERE c.{weight_name} IS NOT NULL
+                    SET c.{weight_name} = c.{weight_name} + 1
+                }}
+                CALL {{
+                    WITH a
+                    MATCH (au1:Author)<-[:AUTHORED_BY]-(a)-[:AUTHORED_BY]->(au2:Author)
+                    MATCH (au1)-[c:COAUTHOR_OF]->(au2)
+                    WHERE c.{weight_name} IS NULL
+                    SET c.{weight_name} = 1
+                }}
+            """.format(weight_name=extension_weight_name)
+
+            self.neo4j_client.run(extension_coauthorship_weight_query, parameters={"dois": dois})
+
+        self.neo4j_client.run(coauthorship_weight_query, parameters={"dois": dois})
+        self.neo4j_client.run(addition_query, parameters={"dois": dois, "catalog_base_name": catalog_base_name, "username": username})
 
     def add_articles_to_extension(self, username, catalog_base_name, catalog_extension_name, dois):
+
+        user_id, catalog_base_id, catalog_extension_id = CatalogService._get_ids(self.neo4j_client.driver.session(), username, catalog_base_name, catalog_extension_name)
+
+        weight_name = 'weight_' + str(user_id) + '_' + str(catalog_base_id) + '_' + str(catalog_extension_id)
+        base_weight_name = 'weight_' + str(user_id) + '_' + str(catalog_base_id)
             
-        query = """
+        addition_query = """
             UNWIND $dois AS doi
             MATCH (a:Article), (ce:CatalogExtension)-[e:EXTENDS]->(cb:CatalogBase)-[o:OWNED_BY]->(u:User)
             WHERE a.doi = doi AND cb.name = $catalog_base_name AND ce.name = $catalog_extension_name AND u.username = $username
             MERGE (a)-[i:IN]->(ce)
         """
 
-        self.neo4j_client.run(query, parameters={"dois": dois, "catalog_base_name": catalog_base_name, "catalog_extension_name": catalog_extension_name, "username": username})
+        base_coauthorship_weight_query = """
+            MATCH (u:User)<-[:OWNED_BY]-(cb:CatalogBase)
+            WHERE u.username = "{username}" AND cb.name = "{catalog_base_name}"
+            MATCH (au1:Author)<-[:AUTHORED_BY]-(a:Article)-[:AUTHORED_BY]->(au2:Author)
+            WHERE (a)-[:IN]->(cb)
+            MATCH (au1)-[c:COAUTHOR_OF]->(au2)
+            WHERE c.{weight_name} IS NULL
+            SET c.{weight_name} = c.{base_weight_name}
+        """.format(username=username, catalog_base_name=catalog_base_name, catalog_extension_name=catalog_extension_name, weight_name=weight_name, base_weight_name=base_weight_name)
+
+        coauthorship_weight_query = """
+            UNWIND $dois AS doi
+            MATCH (a:Article)
+            WHERE a.doi = doi
+            CALL {{
+                WITH a
+                MATCH (au1:Author)<-[:AUTHORED_BY]-(a)-[:AUTHORED_BY]->(au2:Author)
+                MATCH (au1)-[c:COAUTHOR_OF]->(au2)
+                WHERE c.{weight_name} IS NOT NULL
+                SET c.{weight_name} = c.{weight_name} + 1
+            }}
+            CALL {{
+                WITH a
+                MATCH (au1:Author)<-[:AUTHORED_BY]-(a)-[:AUTHORED_BY]->(au2:Author)
+                MATCH (au1)-[c:COAUTHOR_OF]->(au2)
+                WHERE c.{weight_name} IS NULL
+                SET c.{weight_name} = 1
+            }}
+        """.format(weight_name=weight_name)
+
+        self.neo4j_client.run(base_coauthorship_weight_query)
+        self.neo4j_client.run(coauthorship_weight_query, parameters={"dois": dois})
+        self.neo4j_client.run(addition_query, parameters={"dois": dois, "catalog_base_name": catalog_base_name, "catalog_extension_name": catalog_extension_name, "username": username})
 
     def remove_article_from_base(self, username, catalog_base_name, doi):
+
+        user_id, catalog_base_id, _ = CatalogService._get_ids(self.neo4j_client.driver.session(), username, catalog_base_name)
+
+        weight_name = 'weight_' + str(user_id) + '_' + str(catalog_base_id)
 
         query = """
             MATCH (a:Article)-[i:IN]->(cb:CatalogBase)-[o:OWNED_BY]->(u:User)
@@ -184,9 +290,56 @@ class CatalogService():
             DELETE i
         """
 
+        coauthorship_weight_query = """
+            MATCH (au1:Author)<-[:AUTHORED_BY]-(a:Article)-[:AUTHORED_BY]->(au2:Author)
+            WHERE a.doi = $doi
+            MATCH (au1)-[c:COAUTHOR_OF]->(au2)
+            WHERE c.{weight_name} IS NOT NULL
+            WITH DISTINCT c
+            SET c.{weight_name} = c.{weight_name} - 1
+        """.format(weight_name=weight_name)
+
+        clean_coauthorship_weight_query = """
+            MATCH (au1:Author)<-[:AUTHORED_BY]-(a:Article)-[:AUTHORED_BY]->(au2:Author)
+            WHERE a.doi = $doi
+            MATCH (au1)-[c:COAUTHOR_OF]->(au2)
+            WHERE c.{weight_name} = 0
+            REMOVE c.{weight_name}
+        """.format(weight_name=weight_name)
+
+        catalog_extension_ids = self.get_extension_ids_of_catalog_base(username, catalog_base_name)
+
+        for catalog_extension_id in catalog_extension_ids:
+            extension_weight_name = 'weight_' + str(user_id) + '_' + str(catalog_base_id) + '_' + str(catalog_extension_id)
+            extension_coauthorship_weight_query = """
+                MATCH (au1:Author)<-[:AUTHORED_BY]-(a:Article)-[:AUTHORED_BY]->(au2:Author)
+                WHERE a.doi = $doi
+                MATCH (au1)-[c:COAUTHOR_OF]->(au2)
+                WHERE c.{weight_name} IS NOT NULL
+                WITH DISTINCT c
+                SET c.{weight_name} = c.{weight_name} - 1
+            """.format(weight_name=extension_weight_name)
+
+            extension_clean_coauthorship_weight_query = """
+                MATCH (au1:Author)<-[:AUTHORED_BY]-(a:Article)-[:AUTHORED_BY]->(au2:Author)
+                WHERE a.doi = $doi
+                MATCH (au1)-[c:COAUTHOR_OF]->(au2)
+                WHERE c.{weight_name} = 0
+                REMOVE c.{weight_name}
+            """.format(weight_name=extension_weight_name)
+
+            self.neo4j_client.run(extension_coauthorship_weight_query, parameters={"doi": doi})
+            self.neo4j_client.run(extension_clean_coauthorship_weight_query, parameters={"doi": doi})
+
+        self.neo4j_client.run(coauthorship_weight_query, parameters={"doi": doi})
+        self.neo4j_client.run(clean_coauthorship_weight_query, parameters={"doi": doi})
         self.neo4j_client.run(query, parameters={"doi": doi, "catalog_base_name": catalog_base_name, "username": username})
 
     def remove_article_from_extension(self, username, catalog_base_name, catalog_extension_name, doi):
+
+        user_id, catalog_base_id, catalog_extension_id = CatalogService._get_ids(self.neo4j_client.driver.session(), username, catalog_base_name, catalog_extension_name)
+
+        weight_name = 'weight_' + str(user_id) + '_' + str(catalog_base_id) + '_' + str(catalog_extension_id)
 
         query = """
             MATCH (a:Article)-[i:IN]->(ce:CatalogExtension)-[e:EXTENDS]->(cb:CatalogBase)-[o:OWNED_BY]->(u:User)
@@ -194,6 +347,25 @@ class CatalogService():
             DELETE i
         """
 
+        coauthorship_weight_query = """
+            MATCH (au1:Author)<-[:AUTHORED_BY]-(a:Article)-[:AUTHORED_BY]->(au2:Author)
+            WHERE a.doi = $doi
+            MATCH (au1)-[c:COAUTHOR_OF]->(au2)
+            WHERE c.{weight_name} IS NOT NULL
+            WITH DISTINCT c
+            SET c.{weight_name} = c.{weight_name} - 1
+        """.format(weight_name=weight_name)
+
+        clean_coauthorship_weight_query = """
+            MATCH (au1:Author)<-[:AUTHORED_BY]-(a:Article)-[:AUTHORED_BY]->(au2:Author)
+            WHERE a.doi = $doi
+            MATCH (au1)-[c:COAUTHOR_OF]->(au2)
+            WHERE c.{weight_name} = 0
+            REMOVE c.{weight_name}
+        """.format(weight_name=weight_name)
+
+        self.neo4j_client.run(coauthorship_weight_query, parameters={"doi": doi})
+        self.neo4j_client.run(clean_coauthorship_weight_query, parameters={"doi": doi})
         self.neo4j_client.run(query, parameters={"doi": doi, "catalog_base_name": catalog_base_name, "catalog_extension_name": catalog_extension_name, "username": username})
 
     def get_base_articles(self, username, catalog_base_name, ) -> List[Article]:
@@ -471,3 +643,17 @@ class CatalogService():
         catalog_extensions = result[0]["catalog_extensions"]
 
         return catalog_extensions
+    
+    def get_extension_ids_of_catalog_base(self, username, catalog_base_name) -> List[str]:
+
+        query = """
+            MATCH (c:CatalogExtension)-[e:EXTENDS]->(cb:CatalogBase)-[o:OWNED_BY]->(u:User)
+            WHERE cb.name = $catalog_base_name AND u.username = $username
+            RETURN collect(id(c)) AS catalog_extension_ids
+        """
+
+        result = self.neo4j_client.run(query, parameters={"catalog_base_name": catalog_base_name, "username": username})
+
+        catalog_extension_ids = result[0]["catalog_extension_ids"]
+
+        return catalog_extension_ids

@@ -115,6 +115,14 @@ class CatalogBaseView(APIView):
             
             t = time.time()
             start = time.time()
+
+            articles_in_base = self.catalog_service.get_base_articles(user.username, catalog_base_name)
+            article_dois_in_base = set([article["doi"] for article in articles_in_base])
+            not_in_base = set(article_dois) - article_dois_in_base
+            article_dois = list(not_in_base)
+
+            if not article_dois:
+                return Response({'error': 'all articles already in base'}, status=status.HTTP_400_BAD_REQUEST)
             
             existing_articles = self.catalog_service.get_existing_articles(article_dois)
 
@@ -414,17 +422,14 @@ class CatalogExtensionView(APIView):
             print("total: ", time.time() - start)
 
             return Response({"info": "s2ag outbound citations added"}, status=status.HTTP_200_OK)
+        
+        elif edit_type == "add_article":
 
-        elif edit_type == "add_s2ag_paper_id":
+            article_dois = request.data.getlist('article_doi', None)
+            article_dois = list(set(article_dois))
 
-            # TODO: this is old code, need to update to new pattern
-
-            # this part is very similar to adding a single paper to a catalog base
-
-            article_doi = request.data.get('article_doi', None)
-            
             fields = {
-                'article_doi': article_doi
+                'article_doi': article_dois
             }
 
             validation_result = self.request_validator.validate(fields)
@@ -432,31 +437,54 @@ class CatalogExtensionView(APIView):
             if validation_result:
                 return validation_result
             
-            article_in_extension = self.catalog_service.check_if_article_in_extension(user.username, catalog_base_name, catalog_extension_name, article_doi)
+            t = time.time()
+            start = time.time()
 
-            if article_in_extension:
-                return Response({'error': 'article already in extension'}, status=status.HTTP_400_BAD_REQUEST)
+            articles_in_extension = self.catalog_service.get_extension_articles(user.username, catalog_base_name, catalog_extension_name)
+            article_dois_in_extension = set([article["doi"] for article in articles_in_extension])
+            not_in_extension = set(article_dois) - article_dois_in_extension
+            article_dois = list(not_in_extension)
+
+            if not article_dois:
+                return Response({'error': 'all articles already in extension'}, status=status.HTTP_400_BAD_REQUEST)
             
-            article = self.s2ag_service.get_article(article_doi)
+            existing_articles = self.catalog_service.get_existing_articles(article_dois)
 
-            existing_articles = self.catalog_service.get_existing_articles([article_doi])
+            for article in existing_articles:
 
-            if not existing_articles:
+                print("existing article: ", article["doi"])
 
-                article_result = self.s2ag_service.get_articles([article_doi])
+            non_existing_article_dois = [article_doi for article_doi in article_dois if article_doi not in [article["doi"] for article in existing_articles]]
 
-                if type(article_result) is int:
-                    return Response({'error': 'Error while getting article from external source'}, status=status.HTTP_502_BAD_GATEWAY)
+            for article_doi in non_existing_article_dois:
+
+                print("non existing article: ", article_doi)
+
+            print("existing articles: ", time.time() - t)
+            t = time.time()
+
+            if non_existing_article_dois:
+
+                article_result = self.s2ag_service.get_articles(non_existing_article_dois)
+
+                print("get articles: ", time.time() - t)
+                t = time.time()
 
                 self.catalog_service.create_article_patterns(article_result)
 
-            self.catalog_service.add_articles_to_extension(user.username, catalog_base_name, catalog_extension_name, [article_doi])
+                print("create article pattern: ", time.time() - t)
+                t = time.time()
             
-            return Response({"info": "article with doi: " + article_doi + " added to catalog extension: " + catalog_extension_name}, status=status.HTTP_200_OK)
+            self.catalog_service.add_articles_to_extension(user.username, catalog_base_name, catalog_extension_name, article_dois)
 
-        elif edit_type == "remove_s2ag_paper_id":
+            print("add article to extension: ", time.time() - t)
+            t = time.time()
 
-            # TODO: this is old code, need to update to new pattern
+            print("total: ", time.time() - start)
+
+            return Response({"info": "articles added to catalog extension: " + catalog_extension_name}, status=status.HTTP_200_OK)
+
+        elif edit_type == "remove_article":
 
             article_doi = request.data.get('article_doi', None)
 
@@ -468,11 +496,11 @@ class CatalogExtensionView(APIView):
 
             if validation_result:
                 return validation_result
-            
+
             article_in_extension = self.catalog_service.check_if_article_in_extension(user.username, catalog_base_name, catalog_extension_name, article_doi)
 
             if not article_in_extension:
-                return Response({'error': 'article not in extension'}, status=status.HTTP_400_BAD_REQUEST)
+                return Response({'error': 'article_doi: ' + article_doi + ' not in catalog extension: ' + catalog_extension_name}, status=status.HTTP_400_BAD_REQUEST)
             
             self.catalog_service.remove_article_from_extension(user.username, catalog_base_name, catalog_extension_name, article_doi)
 

@@ -6,6 +6,14 @@ class ProjectionService():
     def __init__(self, neo4j_client: Neo4jClient):
         self.neo4j_client = neo4j_client
 
+    def _get_ids(tx, username, catalog_base_name, catalog_extension_name=None):
+
+        user_id = tx.run("""MATCH (u:User) WHERE u.username = "{username}" RETURN id(u) AS id""".format(username=username)).data()[0]['id']
+        catalog_base_id = tx.run("""MATCH (u:User)<-[:OWNED_BY]-(cb:CatalogBase) WHERE u.username = "{username}" AND cb.name = "{catalog_base_name}" RETURN id(cb) AS id""".format(username=username, catalog_base_name=catalog_base_name)).data()[0]['id']
+        catalog_extension_id = None if catalog_extension_name is None else tx.run("""MATCH (u:User)<-[:OWNED_BY]-(cb:CatalogBase)<-[:EXTENDS]-(ce:CatalogExtension) WHERE u.username = "{username}" AND cb.name = "{catalog_base_name}" AND ce.name = "{catalog_extension_name}" RETURN id(ce) AS id""".format(username=username, catalog_base_name=catalog_base_name, catalog_extension_name=catalog_extension_name)).data()[0]['id']
+
+        return user_id, catalog_base_id, catalog_extension_id
+
     def _remove_named_graph(tx, username, catalog_base_name, catalog_extension_name=None):
 
         if catalog_extension_name is None:
@@ -26,291 +34,81 @@ class ProjectionService():
                 remove_graph_query = """CALL gds.graph.drop('{username}/{catalog_base_name}/{catalog_extension_name}')""".format(username=username, catalog_base_name=catalog_base_name, catalog_extension_name=catalog_extension_name)
                 tx.run(remove_graph_query)
 
-    def _create_named_graph(tx, username, catalog_base_name, catalog_extension_name=None, graph_type=None):
+    def _create_named_graph(tx, username, catalog_base_name, catalog_extension_name=None, graph_type=None, start_date=None, end_date=None):
+
+        catalog_extension_projection = '' if catalog_extension_name is None else '/' + catalog_extension_name
+        catalog_extension_pattern = '' if catalog_extension_name is None else '<-[:EXTENDS]-(ce:CatalogExtension)'
+        catalog_extension_condition = '' if catalog_extension_name is None else ' AND ce.name = "{catalog_extension_name}"'.format(catalog_extension_name=catalog_extension_name)
+        catalog_extension_with = '' if catalog_extension_name is None else ', ce'
+        catalog_extension_in_a = '' if catalog_extension_name is None else ' OR (a)-[:IN]->(ce)'
+        catalog_extension_in_c = '' if catalog_extension_name is None else ' OR (c)-[:IN]->(ce)'
+        catalog_extension_author_in_au1 = '' if catalog_extension_name is None else ' OR (au1)<-[:AUTHORED_BY]-(:Article)-[:IN]->(ce)'
+        catalog_extension_author_in_au2 = '' if catalog_extension_name is None else ' OR (au2)<-[:AUTHORED_BY]-(:Article)-[:IN]->(ce)'
+        publication_date_condition_a = '' if start_date is None or end_date is None else ' AND (date(a.publication_date) >= date("{start_date}") AND date(a.publication_date) <= date("{end_date}"))'.format(start_date=start_date, end_date=end_date)
+        publication_date_condition_c = '' if start_date is None or end_date is None else ' AND (date(c.publication_date) >= date("{start_date}") AND date(c.publication_date) <= date("{end_date}"))'.format(start_date=start_date, end_date=end_date)
+
+        user_id, catalog_base_id, catalog_extension_id = ProjectionService._get_ids(tx, username, catalog_base_name, catalog_extension_name)
+
+        weight_name = 'weight_' + str(user_id) + '_' + str(catalog_base_id) if catalog_extension_id is None else 'weight_' + str(user_id) + '_' + str(catalog_base_id) + '_' + str(catalog_extension_id)
+
+        if graph_type == ('Article', 'CITES'):
+
+            named_graph_query = """CALL gds.graph.project.cypher('{username}/{catalog_base_name}{catalog_extension_projection}',
+                    'MATCH (u:User)<-[:OWNED_BY]-(cb:CatalogBase){catalog_extension_pattern}
+                    WHERE u.username = "{username}" AND cb.name = "{catalog_base_name}"{catalog_extension_condition}
+                    WITH cb{catalog_extension_with}
+                    MATCH (a:Article)
+                    WHERE ((a)-[:IN]->(cb){catalog_extension_in_a}){publication_date_condition_a}
+                    RETURN id(a) AS id',
+                    'MATCH (u:User)<-[:OWNED_BY]-(cb:CatalogBase){catalog_extension_pattern}
+                    WHERE u.username = "{username}" AND cb.name = "{catalog_base_name}"{catalog_extension_condition}
+                    WITH cb{catalog_extension_with}
+                    MATCH (a:Article), (c:Article)
+                    WHERE (((a)-[:IN]->(cb){catalog_extension_in_a}){publication_date_condition_a}) AND (((c)-[:IN]->(cb){catalog_extension_in_c}){publication_date_condition_c})
+                    WITH a, c
+                    MATCH (a)-[r:CITES]->(c)
+                    RETURN DISTINCT id(a) AS source, id(c) AS target')
+                """.format(username=username,
+                           catalog_base_name=catalog_base_name,
+                           catalog_extension_projection=catalog_extension_projection,
+                           catalog_extension_pattern=catalog_extension_pattern,
+                           catalog_extension_condition=catalog_extension_condition,
+                           catalog_extension_with=catalog_extension_with,
+                           catalog_extension_in_a=catalog_extension_in_a,
+                           catalog_extension_in_c=catalog_extension_in_c,
+                           publication_date_condition_a=publication_date_condition_a,
+                           publication_date_condition_c=publication_date_condition_c)
+            
+        elif graph_type == ('Author', 'COAUTHOR_OF'):
         
-        if catalog_extension_name is None or catalog_extension_name =='':
-            
-            if graph_type == ('Article', 'CITES'):
-
-                named_graph_query = """CALL gds.graph.project.cypher('{username}/{catalog_base_name}',
-                    'MATCH (u:User)<-[:OWNED_BY]-(cb:CatalogBase)
-                    WHERE u.username = "{username}" AND cb.name = "{catalog_base_name}"
-                    WITH cb
-                    MATCH (a:Article)
-                    WHERE (a)-[:IN]->(cb)
-                    RETURN id(a) AS id',
-                    'MATCH (u:User)<-[:OWNED_BY]-(cb:CatalogBase)
-                    WHERE u.username = "{username}" AND cb.name = "{catalog_base_name}"
-                    WITH cb
-                    MATCH (a:Article), (c:Article)
-                    WHERE ((a)-[:IN]->(cb)) AND ((c)-[:IN]->(cb))
-                    WITH a, c
-                    MATCH (a)-[r:CITES]->(c)
-                    RETURN DISTINCT id(a) AS source, id(c) AS target')
-                """.format(username=username, catalog_base_name=catalog_base_name)
-
-                tx.run(named_graph_query)
-
-            elif graph_type == ('Author', 'COAUTHOR_OF'):
-
-                weight_assignment_query = """MATCH (u:User)<-[:OWNED_BY]-(cb:CatalogBase)
-                    WHERE u.username = "{username}" AND cb.name = "{catalog_base_name}"
-                    WITH cb
-                    MATCH (au1:Author)-[r:COAUTHOR_OF]-(au2:Author)
-                    WHERE ((au1)<-[:AUTHORED_BY]-(:Article)-[:IN]->(cb)) AND ((au2)<-[:AUTHORED_BY]-(:Article)-[:IN]->(cb))
-                    WITH au1, au2, r, cb
-                    MATCH (a)-[:AUTHORED_BY]->(au1), (a)-[:AUTHORED_BY]->(au2)
-                    WHERE (a)-[:IN]->(cb)
-                    WITH au1, au2, r, count(a) AS weight
-                    SET r.weight = weight
-                    """.format(username=username, catalog_base_name=catalog_base_name)
-
-                weight_removal_query = """MATCH (u:User)<-[:OWNED_BY]-(cb:CatalogBase)
-                    WHERE u.username = "{username}" AND cb.name = "{catalog_base_name}"
-                    WITH cb
-                    MATCH (au1:Author)-[r:COAUTHOR_OF]-(au2:Author)
-                    WHERE ((au1)<-[:AUTHORED_BY]-(:Article)-[:IN]->(cb)) AND ((au2)<-[:AUTHORED_BY]-(:Article)-[:IN]->(cb))
-                    WITH au1, au2, r, cb
-                    MATCH (a)-[:AUTHORED_BY]->(au1), (a)-[:AUTHORED_BY]->(au2)
-                    WHERE (a)-[:IN]->(cb)
-                    WITH au1, au2, r, count(a) AS weight
-                    REMOVE r.weight
-                    """.format(username=username, catalog_base_name=catalog_base_name)
-
-                named_graph_query = """CALL gds.graph.project.cypher('{username}/{catalog_base_name}',
-                    'MATCH (u:User)<-[:OWNED_BY]-(cb:CatalogBase)
-                    WHERE u.username = "{username}" AND cb.name = "{catalog_base_name}"
-                    WITH cb
-                    MATCH (au:Author)
-                    WHERE (au)<-[:AUTHORED_BY]-(:Article)-[:IN]->(cb)
-                    RETURN id(au) AS id',
-                    'MATCH (u:User)<-[:OWNED_BY]-(cb:CatalogBase)
-                    WHERE u.username = "{username}" AND cb.name = "{catalog_base_name}"
-                    WITH cb
-                    MATCH (au1:Author)-[r:COAUTHOR_OF]-(au2:Author)
-                    WHERE ((au1)<-[:AUTHORED_BY]-(:Article)-[:IN]->(cb)) AND ((au2)<-[:AUTHORED_BY]-(:Article)-[:IN]->(cb))
-                    WITH au1, au2, r, cb
-                    MATCH (a)-[:AUTHORED_BY]->(au1), (a)-[:AUTHORED_BY]->(au2)
-                    WHERE (a)-[:IN]->(cb)
-                    WITH au1, au2
-                    MATCH (au1)-[r:COAUTHOR_OF]-(au2)
-                    RETURN DISTINCT id(au1) AS source, id(au2) AS target, r.weight AS weight')
-                """.format(username=username, catalog_base_name=catalog_base_name)
-
-                tx.run(weight_assignment_query)
-                tx.run(named_graph_query)
-                tx.run(weight_removal_query)
-
-        else:
-
-            if graph_type == ('Article', 'CITES'):
-
-                named_graph_query = """CALL gds.graph.project.cypher('{username}/{catalog_base_name}/{catalog_extension_name}',
-                    'MATCH (u:User)<-[:OWNED_BY]-(cb:CatalogBase)<-[:EXTENDS]-(ce:CatalogExtension)
-                    WHERE u.username = "{username}" AND cb.name = "{catalog_base_name}" AND ce.name = "{catalog_extension_name}"
-                    WITH cb, ce
-                    MATCH (a:Article)
-                    WHERE (a)-[:IN]->(cb) OR (a)-[:IN]->(ce)
-                    RETURN id(a) AS id',
-                    'MATCH (u:User)<-[:OWNED_BY]-(cb:CatalogBase)<-[:EXTENDS]-(ce:CatalogExtension)
-                    WHERE u.username = "{username}" AND cb.name = "{catalog_base_name}" AND ce.name = "{catalog_extension_name}"
-                    WITH cb, ce
-                    MATCH (a:Article), (c:Article)
-                    WHERE ((a)-[:IN]->(cb) OR (a)-[:IN]->(ce)) AND ((c)-[:IN]->(cb) OR (c)-[:IN]->(ce))
-                    WITH a, c
-                    MATCH (a)-[r:CITES]->(c)
-                    RETURN DISTINCT id(a) AS source, id(c) AS target')
-                """.format(username=username, catalog_base_name=catalog_base_name, catalog_extension_name=catalog_extension_name)
-
-                tx.run(named_graph_query)
-            
-            elif graph_type == ('Author', 'COAUTHOR_OF'):
-
-                weight_assignment_query = """MATCH (u:User)<-[:OWNED_BY]-(cb:CatalogBase)<-[:EXTENDS]-(ce:CatalogExtension)
-                    WHERE u.username = "{username}" AND cb.name = "{catalog_base_name}" AND ce.name = "{catalog_extension_name}"
-                    WITH cb, ce
-                    MATCH (au1:Author)-[r:COAUTHOR_OF]-(au2:Author)
-                    WHERE ((au1)<-[:AUTHORED_BY]-(:Article)-[:IN]->(cb) OR (au1)<-[:AUTHORED_BY]-(:Article)-[:IN]->(ce)) AND ((au2)<-[:AUTHORED_BY]-(:Article)-[:IN]->(cb) OR (au2)<-[:AUTHORED_BY]-(:Article)-[:IN]->(ce))
-                    WITH au1, au2, r, cb, ce
-                    MATCH (a)-[:AUTHORED_BY]->(au1), (a)-[:AUTHORED_BY]->(au2)
-                    WHERE (a)-[:IN]->(cb) OR (a)-[:IN]->(ce)
-                    WITH au1, au2, r, count(a) AS weight
-                    SET r.weight = weight
-                    """.format(username=username, catalog_base_name=catalog_base_name, catalog_extension_name=catalog_extension_name)
-                
-                weight_removal_query = """MATCH (u:User)<-[:OWNED_BY]-(cb:CatalogBase)<-[:EXTENDS]-(ce:CatalogExtension)
-                    WHERE u.username = "{username}" AND cb.name = "{catalog_base_name}" AND ce.name = "{catalog_extension_name}"
-                    WITH cb, ce
-                    MATCH (au1:Author)-[r:COAUTHOR_OF]-(au2:Author)
-                    WHERE ((au1)<-[:AUTHORED_BY]-(:Article)-[:IN]->(cb) OR (au1)<-[:AUTHORED_BY]-(:Article)-[:IN]->(ce)) AND ((au2)<-[:AUTHORED_BY]-(:Article)-[:IN]->(cb) OR (au2)<-[:AUTHORED_BY]-(:Article)-[:IN]->(ce))
-                    WITH r
-                    REMOVE r.weight
-                    """.format(username=username, catalog_base_name=catalog_base_name, catalog_extension_name=catalog_extension_name)
-
-                named_graph_query = """CALL gds.graph.project.cypher('{username}/{catalog_base_name}/{catalog_extension_name}',
-                    'MATCH (u:User)<-[:OWNED_BY]-(cb:CatalogBase)<-[:EXTENDS]-(ce:CatalogExtension)
-                    WHERE u.username = "{username}" AND cb.name = "{catalog_base_name}" AND ce.name = "{catalog_extension_name}"
-                    WITH cb, ce
+            named_graph_query = """CALL gds.graph.project.cypher('{username}/{catalog_base_name}{catalog_extension_projection}',
+                    'MATCH (u:User)<-[:OWNED_BY]-(cb:CatalogBase){catalog_extension_pattern}
+                    WHERE u.username = "{username}" AND cb.name = "{catalog_base_name}"{catalog_extension_condition}
+                    WITH cb{catalog_extension_with}
                     MATCH (a:Article)-[:AUTHORED_BY]->(au:Author)
-                    WHERE (a)-[:IN]->(cb) OR (a)-[:IN]->(ce)
+                    WHERE ((a)-[:IN]->(cb){catalog_extension_in_a}){publication_date_condition_a}
                     RETURN id(au) AS id',
-                    'MATCH (u:User)<-[:OWNED_BY]-(cb:CatalogBase)<-[:EXTENDS]-(ce:CatalogExtension)
-                    WHERE u.username = "{username}" AND cb.name = "{catalog_base_name}" AND ce.name = "{catalog_extension_name}"
-                    WITH cb, ce
-                    MATCH (au1:Author), (au2:Author)
-                    WHERE ((au1)<-[:AUTHORED_BY]-(:Article)-[:IN]->(cb) OR (au1)<-[:AUTHORED_BY]-(:Article)-[:IN]->(ce)) AND ((au2)<-[:AUTHORED_BY]-(:Article)-[:IN]->(cb) OR (au2)<-[:AUTHORED_BY]-(:Article)-[:IN]->(ce))
-                    WITH au1, au2
-                    MATCH (au1)-[r:COAUTHOR_OF]-(au2)
-                    RETURN DISTINCT id(au1) AS source, id(au2) AS target, r.weight AS weight')
-                """.format(username=username, catalog_base_name=catalog_base_name, catalog_extension_name=catalog_extension_name)
-
-                tx.run(weight_assignment_query)
-                tx.run(named_graph_query)
-                tx.run(weight_removal_query)
-
-    def _create_named_graph_time(tx, username, catalog_base_name, catalog_extension_name=None, graph_type=None, start_date=None, end_date=None):
-
-        if catalog_extension_name is None or catalog_extension_name =='':
-            
-            if graph_type == ('Article', 'CITES'):
-
-                named_graph_query = """CALL gds.graph.project.cypher('{username}/{catalog_base_name}',
-                    'MATCH (u:User)<-[:OWNED_BY]-(cb:CatalogBase)
-                    WHERE u.username = "{username}" AND cb.name = "{catalog_base_name}"
-                    WITH cb
-                    MATCH (a:Article)
-                    WHERE (a)-[:IN]->(cb) AND date(a.publication_date) >= date("{start_date}") AND date(a.publication_date) <= date("{end_date}")
-                    RETURN id(a) AS id',
-                    'MATCH (u:User)<-[:OWNED_BY]-(cb:CatalogBase)
-                    WHERE u.username = "{username}" AND cb.name = "{catalog_base_name}"
-                    WITH cb
-                    MATCH (a:Article), (c:Article)
-                    WHERE ((a)-[:IN]->(cb)) AND ((c)-[:IN]->(cb)) AND date(a.publication_date) >= date("{start_date}") AND date(a.publication_date) <= date("{end_date}") AND date(c.publication_date) >= date("{start_date}") AND date(c.publication_date) <= date("{end_date}")
-                    WITH a, c
-                    MATCH (a)-[r:CITES]->(c)
-                    RETURN DISTINCT id(a) AS source, id(c) AS target')
-                """.format(username=username, catalog_base_name=catalog_base_name, start_date=start_date, end_date=end_date)
-
-                tx.run(named_graph_query)
-
-            elif graph_type == ('Author', 'COAUTHOR_OF'):
-
-                weight_assignment_query = """MATCH (u:User)<-[:OWNED_BY]-(cb:CatalogBase)
-                    WHERE u.username = "{username}" AND cb.name = "{catalog_base_name}"
-                    WITH cb
-                    MATCH (au1:Author)-[r:COAUTHOR_OF]-(au2:Author)
-                    WHERE ((au1)<-[:AUTHORED_BY]-(:Article)-[:IN]->(cb)) AND ((au2)<-[:AUTHORED_BY]-(:Article)-[:IN]->(cb))
-                    WITH au1, au2, r, cb
-                    MATCH (a)-[:AUTHORED_BY]->(au1), (a)-[:AUTHORED_BY]->(au2)
-                    WHERE (a)-[:IN]->(cb) AND date(a.publication_date) >= date("{start_date}") AND date(a.publication_date) <= date("{end_date}")
-                    WITH au1, au2, r, count(a) AS weight
-                    SET r.weight = weight
-                    """.format(username=username, catalog_base_name=catalog_base_name, start_date=start_date, end_date=end_date)
-
-                weight_removal_query = """MATCH (u:User)<-[:OWNED_BY]-(cb:CatalogBase)
-                    WHERE u.username = "{username}" AND cb.name = "{catalog_base_name}"
-                    WITH cb
-                    MATCH (au1:Author)-[r:COAUTHOR_OF]-(au2:Author)
-                    WHERE ((au1)<-[:AUTHORED_BY]-(:Article)-[:IN]->(cb)) AND ((au2)<-[:AUTHORED_BY]-(:Article)-[:IN]->(cb))
-                    WITH au1, au2, r, cb
-                    MATCH (a)-[:AUTHORED_BY]->(au1), (a)-[:AUTHORED_BY]->(au2)
-                    WHERE (a)-[:IN]->(cb) AND date(a.publication_date) >= date("{start_date}") AND date(a.publication_date) <= date("{end_date}")
-                    WITH au1, au2, r, count(a) AS weight
-                    REMOVE r.weight
-                    """.format(username=username, catalog_base_name=catalog_base_name, start_date=start_date, end_date=end_date)
-
-                named_graph_query = """CALL gds.graph.project.cypher('{username}/{catalog_base_name}',
-                    'MATCH (u:User)<-[:OWNED_BY]-(cb:CatalogBase)
-                    WHERE u.username = "{username}" AND cb.name = "{catalog_base_name}"
-                    WITH cb
-                    MATCH (au:Author)<-[:AUTHORED_BY]-(a:Article)
-                    WHERE (a)-[:IN]->(cb) AND date(a.publication_date) >= date("{start_date}") AND date(a.publication_date) <= date("{end_date}")
-                    RETURN id(au) AS id',
-                    'MATCH (u:User)<-[:OWNED_BY]-(cb:CatalogBase)
-                    WHERE u.username = "{username}" AND cb.name = "{catalog_base_name}"
-                    WITH cb
-                    MATCH (au1:Author)-[r:COAUTHOR_OF]-(au2:Author)
-                    WHERE ((au1)<-[:AUTHORED_BY]-(:Article)-[:IN]->(cb)) AND ((au2)<-[:AUTHORED_BY]-(:Article)-[:IN]->(cb))
-                    WITH au1, au2, r, cb
-                    MATCH (a)-[:AUTHORED_BY]->(au1), (a)-[:AUTHORED_BY]->(au2)
-                    WHERE (a)-[:IN]->(cb) AND date(a.publication_date) >= date("{start_date}") AND date(a.publication_date) <= date("{end_date}")
-                    WITH au1, au2
-                    MATCH (au1)-[r:COAUTHOR_OF]-(au2)
-                    RETURN DISTINCT id(au1) AS source, id(au2) AS target, r.weight AS weight')
-                """.format(username=username, catalog_base_name=catalog_base_name, start_date=start_date, end_date=end_date)
-
-                tx.run(weight_assignment_query)
-                tx.run(named_graph_query)
-                tx.run(weight_removal_query)
-
-        else:
-
-            if graph_type == ('Article', 'CITES'):
-
-                named_graph_query = """CALL gds.graph.project.cypher('{username}/{catalog_base_name}/{catalog_extension_name}',
-                    'MATCH (u:User)<-[:OWNED_BY]-(cb:CatalogBase)<-[:EXTENDS]-(ce:CatalogExtension)
-                    WHERE u.username = "{username}" AND cb.name = "{catalog_base_name}" AND ce.name = "{catalog_extension_name}"
-                    WITH cb, ce
-                    MATCH (a:Article)
-                    WHERE ((a)-[:IN]->(cb) OR (a)-[:IN]->(ce)) AND date(a.publication_date) >= date("{start_date}") AND date(a.publication_date) <= date("{end_date}")
-                    RETURN id(a) AS id',
-                    'MATCH (u:User)<-[:OWNED_BY]-(cb:CatalogBase)<-[:EXTENDS]-(ce:CatalogExtension)
-                    WHERE u.username = "{username}" AND cb.name = "{catalog_base_name}" AND ce.name = "{catalog_extension_name}"
-                    WITH cb, ce
-                    MATCH (a:Article), (c:Article)
-                    WHERE ((a)-[:IN]->(cb) OR (a)-[:IN]->(ce)) AND ((c)-[:IN]->(cb) OR (c)-[:IN]->(ce)) AND date(a.publication_date) >= date("{start_date}") AND date(a.publication_date) <= date("{end_date}") AND date(c.publication_date) >= date("{start_date}") AND date(c.publication_date) <= date("{end_date}")
-                    WITH a, c
-                    MATCH (a)-[r:CITES]->(c)
-                    RETURN DISTINCT id(a) AS source, id(c) AS target')
-                """.format(username=username, catalog_base_name=catalog_base_name, catalog_extension_name=catalog_extension_name, start_date=start_date, end_date=end_date)
-
-                tx.run(named_graph_query)
-            
-            elif graph_type == ('Author', 'COAUTHOR_OF'):
-
-                weight_assignment_query = """MATCH (u:User)<-[:OWNED_BY]-(cb:CatalogBase)<-[:EXTENDS]-(ce:CatalogExtension)
-                    WHERE u.username = "{username}" AND cb.name = "{catalog_base_name}" AND ce.name = "{catalog_extension_name}"
-                    WITH cb, ce
-                    MATCH (au1:Author)-[r:COAUTHOR_OF]-(au2:Author)
-                    WHERE ((au1)<-[:AUTHORED_BY]-(:Article)-[:IN]->(cb) OR (au1)<-[:AUTHORED_BY]-(:Article)-[:IN]->(ce)) AND ((au2)<-[:AUTHORED_BY]-(:Article)-[:IN]->(cb) OR (au2)<-[:AUTHORED_BY]-(:Article)-[:IN]->(ce))
-                    WITH au1, au2, r, cb, ce
-                    MATCH (a)-[:AUTHORED_BY]->(au1), (a)-[:AUTHORED_BY]->(au2)
-                    WHERE ((a)-[:IN]->(cb) OR (a)-[:IN]->(ce)) AND date(a.publication_date) >= date("{start_date}") AND date(a.publication_date) <= date("{end_date}")
-                    WITH au1, au2, r, count(a) AS weight
-                    SET r.weight = weight
-                    """.format(username=username, catalog_base_name=catalog_base_name, catalog_extension_name=catalog_extension_name, start_date=start_date, end_date=end_date)
-                
-                weight_removal_query = """MATCH (u:User)<-[:OWNED_BY]-(cb:CatalogBase)<-[:EXTENDS]-(ce:CatalogExtension)
-                    WHERE u.username = "{username}" AND cb.name = "{catalog_base_name}" AND ce.name = "{catalog_extension_name}"
-                    WITH cb, ce
-                    MATCH (au1:Author)-[r:COAUTHOR_OF]-(au2:Author)
-                    WHERE ((au1)<-[:AUTHORED_BY]-(:Article)-[:IN]->(cb) OR (au1)<-[:AUTHORED_BY]-(:Article)-[:IN]->(ce)) AND ((au2)<-[:AUTHORED_BY]-(:Article)-[:IN]->(cb) OR (au2)<-[:AUTHORED_BY]-(:Article)-[:IN]->(ce))
-                    WITH r
-                    MATCH (a)-[:AUTHORED_BY]->(au1), (a)-[:AUTHORED_BY]->(au2)
-                    WHERE ((a)-[:IN]->(cb) OR (a)-[:IN]->(ce)) AND date(a.publication_date) >= date("{start_date}") AND date(a.publication_date) <= date("{end_date}")
-                    REMOVE r.weight
-                    """.format(username=username, catalog_base_name=catalog_base_name, catalog_extension_name=catalog_extension_name, start_date=start_date, end_date=end_date)
-
-                named_graph_query = """CALL gds.graph.project.cypher('{username}/{catalog_base_name}/{catalog_extension_name}',
-                    'MATCH (u:User)<-[:OWNED_BY]-(cb:CatalogBase)<-[:EXTENDS]-(ce:CatalogExtension)
-                    WHERE u.username = "{username}" AND cb.name = "{catalog_base_name}" AND ce.name = "{catalog_extension_name}"
-                    WITH cb, ce
-                    MATCH (a:Article)-[:AUTHORED_BY]->(au:Author)
-                    WHERE ((a)-[:IN]->(cb) OR (a)-[:IN]->(ce)) AND date(a.publication_date) >= date("{start_date}") AND date(a.publication_date) <= date("{end_date}")
-                    RETURN id(au) AS id',
-                    'MATCH (u:User)<-[:OWNED_BY]-(cb:CatalogBase)<-[:EXTENDS]-(ce:CatalogExtension)
-                    WHERE u.username = "{username}" AND cb.name = "{catalog_base_name}" AND ce.name = "{catalog_extension_name}"
-                    WITH cb, ce
+                    'MATCH (u:User)<-[:OWNED_BY]-(cb:CatalogBase){catalog_extension_pattern}
+                    WHERE u.username = "{username}" AND cb.name = "{catalog_base_name}"{catalog_extension_condition}
+                    WITH cb{catalog_extension_with}
                     MATCH (au1:Author)<-[:AUTHORED_BY]-(a:Article), (au2:Author)<-[:AUTHORED_BY]-(a:Article)
-                    WHERE ((a)-[:IN]->(cb) OR (a)-[:IN]->(ce)) AND date(a.publication_date) >= date("{start_date}") AND date(a.publication_date) <= date("{end_date}")
+                    WHERE ((a)-[:IN]->(cb){catalog_extension_in_a}){publication_date_condition_a}
                     WITH au1, au2
                     MATCH (au1)-[r:COAUTHOR_OF]-(au2)
-                    RETURN DISTINCT id(au1) AS source, id(au2) AS target, r.weight AS weight')
-                """.format(username=username, catalog_base_name=catalog_base_name, catalog_extension_name=catalog_extension_name, start_date=start_date, end_date=end_date)
+                    RETURN DISTINCT id(au1) AS source, id(au2) AS target, r.{weight_name} AS weight')
+                """.format(username=username,
+                           catalog_base_name=catalog_base_name,
+                           catalog_extension_projection=catalog_extension_projection,
+                           catalog_extension_pattern=catalog_extension_pattern,
+                           catalog_extension_condition=catalog_extension_condition,
+                           catalog_extension_in_a=catalog_extension_in_a,
+                           catalog_extension_with=catalog_extension_with,
+                           catalog_extension_author_in_au1=catalog_extension_author_in_au1,
+                           catalog_extension_author_in_au2=catalog_extension_author_in_au2,
+                           weight_name=weight_name,
+                           publication_date_condition_a=publication_date_condition_a)
 
-                tx.run(weight_assignment_query)
-                tx.run(named_graph_query)
-                tx.run(weight_removal_query)
+        tx.run(named_graph_query)
 
 class CentralityService():
 
@@ -416,15 +214,42 @@ class TimeSeriesCentralityService(CentralityService):
                 print(start_date, datetime.strftime(current_end_date, "%Y-%m-%d")) 
 
                 current_end_date_str = current_end_date.strftime("%Y-%m-%d")
-                ProjectionService._create_named_graph_time(session, username, catalog_base_name, catalog_extension_name, graph_type, start_date, current_end_date_str)
+                ProjectionService._create_named_graph(session, username, catalog_base_name, catalog_extension_name, graph_type, start_date, current_end_date_str)
                 result = session.execute_read(centrality_function, graph_name, graph_type)
 
-                for result_dict in result:
-                    doi = result_dict[graph_type[0]]['doi']
-                    publication_date = result_dict[graph_type[0]]['publication_date']
-                    result_dict.pop(graph_type[0])
-                    result_dict['doi'] = doi
-                    result_dict['publication_date'] = publication_date
+                if graph_type == ('Article', 'CITES'):
+
+                    #TODO: Change the citation and reference keys of this dictionary to inbound_citation_count and outbound_citation_count
+
+                    for result_dict in result:
+                        doi = result_dict[graph_type[0]]['doi']
+                        publication_date = result_dict[graph_type[0]]['publication_date']
+                        citation_count = result_dict[graph_type[0]]['inbound_citation_count']
+                        reference_count = result_dict[graph_type[0]]['outbound_citation_count']
+                        title = result_dict[graph_type[0]]['title']
+                        result_dict.pop(graph_type[0])
+                        result_dict['doi'] = doi
+                        result_dict['publication_date'] = publication_date
+                        result_dict['citation_count'] = citation_count
+                        result_dict['reference_count'] = reference_count
+                        result_dict['title'] = title
+
+                elif graph_type == ('Author', 'COAUTHOR_OF'):
+
+                    for result_dict in result:
+                        author_name = result_dict[graph_type[0]]['name']
+                        citation_count = result_dict[graph_type[0]]['citation_count']
+                        s2ag_id = result_dict[graph_type[0]]['s2ag_id']
+                        h_index = result_dict[graph_type[0]]['h_index']
+                        s2ag_url = result_dict[graph_type[0]]['s2ag_url']
+                        paper_count = result_dict[graph_type[0]]['paper_count']
+                        result_dict.pop(graph_type[0])
+                        result_dict['name'] = author_name
+                        result_dict['citation_count'] = citation_count
+                        result_dict['s2ag_id'] = s2ag_id
+                        result_dict['h_index'] = h_index
+                        result_dict['s2ag_url'] = s2ag_url
+                        result_dict['paper_count'] = paper_count
 
                 results[datetime.strftime(current_end_date, "%Y-%m-%d")] = result
                 ProjectionService._remove_named_graph(session, username, catalog_base_name, catalog_extension_name)
