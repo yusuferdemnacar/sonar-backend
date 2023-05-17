@@ -283,6 +283,11 @@ class DiffTimeSeriesCentralityView(TimeSeriesCentralityView):
 
         scores = self.get_scores(request, score_function)
 
+        node_type = request.query_params.get('node_type', None)
+        edge_type = request.query_params.get('edge_type', None)
+
+        graph_type = (node_type, edge_type)
+
         differential_scores = {}
 
         sorted_dates = sorted([datetime.strftime(datetime.strptime(date, '%Y-%m-%d').date(), '%Y-%m-%d') for date in scores.keys()])
@@ -296,16 +301,48 @@ class DiffTimeSeriesCentralityView(TimeSeriesCentralityView):
                 for result_key in result.keys():
                     if "score" in result_key:
                         score_type = result_key
-                doi = result['doi']
-                publication_date = result['publication_date']
-                old_score = 0
-                if doi in [score['doi'] for score in scores[sorted_dates[key_index - 1]]]:
-                    old_score = [score[score_type] for score in scores[sorted_dates[key_index - 1]] if score['doi'] == doi][0]
-                differential_scores[key].append({
-                    'doi': doi,
-                    'publication_date': publication_date,
-                    score_type: result[score_type] - old_score
-                })
+                
+                if graph_type == ("Article", "CITES"):
+
+                    doi = result['doi']
+                    publication_date = result['publication_date']
+                    #TODO: FIX THIS !!! (citation_count and reference_count are not in the same format as the other scores)
+                    citation_count = result['citation_count']
+                    reference_count = result['reference_count']
+                    title = result['title']
+                    old_score = 0
+                    if doi in [score['doi'] for score in scores[sorted_dates[key_index - 1]]]:
+                        old_score = [score[score_type] for score in scores[sorted_dates[key_index - 1]] if score['doi'] == doi][0]
+                    differential_scores[key].append({
+                        'doi': doi,
+                        'publication_date': publication_date,
+                        'citation_count': citation_count,
+                        'reference_count': reference_count,
+                        'title': title,
+                        score_type: result[score_type] - old_score
+                    })
+                
+                elif graph_type == ("Author", "COAUTHOR_OF"):
+
+                    author_name = result['name']
+                    citation_count = result['citation_count']
+                    s2ag_id = result['s2ag_id']
+                    h_index = result['h_index']
+                    s2ag_url = result['s2ag_url']
+                    paper_count = result['paper_count']
+                    old_score = 0
+                    if s2ag_id in [score['s2ag_id'] for score in scores[sorted_dates[key_index - 1]]]:
+                        old_score = [score[score_type] for score in scores[sorted_dates[key_index - 1]] if score['s2ag_id'] == s2ag_id][0]
+                    differential_scores[key].append({
+                        'name': author_name,
+                        'citation_count': citation_count,
+                        's2ag_id': s2ag_id,
+                        'h_index': h_index,
+                        's2ag_url': s2ag_url,
+                        'paper_count': paper_count,
+                        score_type: result[score_type] - old_score
+                    })
+
             key_index += 1
 
         return differential_scores
