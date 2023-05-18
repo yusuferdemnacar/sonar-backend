@@ -78,9 +78,19 @@ class CentralityView(APIView):
         
         scores = self.centrality_service.calculate_centrality(user.username, catalog_base_name, catalog_extension_name, (node_type, edge_type), score_function)
 
-        if score_function == self.centrality_service.betweenness_centrality and homogenous_graph_types[(node_type, edge_type)] == "UNDIRECTED":
+        print(len(scores))
+        print(score_function.__name__)
+        print(homogenous_graph_types[(node_type, edge_type)])
+        print(score_function == self.centrality_service.betweenness_centrality)
+
+        score_type = [key for key in scores[0].keys() if "score" in key][0]
+        min_score = scores[-1][score_type]
+        max_score = scores[0][score_type]
+
+        if score_function.__name__ == "betweenness_centrality" and homogenous_graph_types[(node_type, edge_type)] == "UNDIRECTED":
+            print("here")
             for result in scores:
-                result["betweenness_centrality_score"] /= 2
+                result["betweenness_centrality_score"] = (result["betweenness_centrality_score"] - min_score) / (max_score - min_score)
 
         for score in scores:
             if node_type == "Article":
@@ -190,7 +200,7 @@ class TimeSeriesCentralityView(CentralityView):
             return Response({'error': 'catalog base not found'}, status=status.HTTP_404_NOT_FOUND)
         
         catalog_base_articles = self.catalog_service.get_base_articles(user.username, catalog_base_name)
-        catalog_publication_dates = [article['publication_date'] for article in catalog_base_articles]
+        catalog_publication_dates = [article['publication_date'] for article in catalog_base_articles if 'publication_date' in article.keys()]
         
         if catalog_extension_name:
 

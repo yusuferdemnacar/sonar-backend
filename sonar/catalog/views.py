@@ -101,7 +101,7 @@ class CatalogBaseView(APIView):
 
         if edit_type == "add_article":
 
-            article_dois = request.data.getlist('article_doi', None)
+            article_dois = request.data.get('article_doi', None)
             article_dois = list(set(article_dois))
 
             fields = {
@@ -425,7 +425,7 @@ class CatalogExtensionView(APIView):
         
         elif edit_type == "add_article":
 
-            article_dois = request.data.getlist('article_doi', None)
+            article_dois = request.data.get('article_doi', None)
             article_dois = list(set(article_dois))
 
             fields = {
