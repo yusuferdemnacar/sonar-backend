@@ -200,7 +200,7 @@ class TimeSeriesCentralityView(CentralityView):
             return Response({'error': 'catalog base not found'}, status=status.HTTP_404_NOT_FOUND)
         
         catalog_base_articles = self.catalog_service.get_base_articles(user.username, catalog_base_name)
-        catalog_publication_dates = [article['publication_date'] for article in catalog_base_articles]
+        catalog_publication_dates = [article['publication_date'] for article in catalog_base_articles if 'publication_date' in article.keys()]
         
         if catalog_extension_name:
 
