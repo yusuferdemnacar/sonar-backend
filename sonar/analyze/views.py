@@ -315,9 +315,10 @@ class DiffTimeSeriesCentralityView(TimeSeriesCentralityView):
                     citation_count = result['citation_count']
                     reference_count = result['reference_count']
                     title = result['title']
-                    old_score = 0
                     if doi in [score['doi'] for score in scores[sorted_dates[key_index - 1]]]:
                         old_score = [score[score_type] for score in scores[sorted_dates[key_index - 1]] if score['doi'] == doi][0]
+                    else:
+                        old_score = result[score_type]
                     differential_scores[key].append({
                         'doi': doi,
                         'publication_date': publication_date,
