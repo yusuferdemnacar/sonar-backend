@@ -78,17 +78,11 @@ class CentralityView(APIView):
         
         scores = self.centrality_service.calculate_centrality(user.username, catalog_base_name, catalog_extension_name, (node_type, edge_type), score_function)
 
-        print(len(scores))
-        print(score_function.__name__)
-        print(homogenous_graph_types[(node_type, edge_type)])
-        print(score_function == self.centrality_service.betweenness_centrality)
-
         score_type = [key for key in scores[0].keys() if "score" in key][0]
         min_score = scores[-1][score_type]
         max_score = scores[0][score_type]
 
         if score_function.__name__ == "betweenness_centrality" and homogenous_graph_types[(node_type, edge_type)] == "UNDIRECTED":
-            print("here")
             for result in scores:
                 result["betweenness_centrality_score"] = (result["betweenness_centrality_score"] - min_score) / (max_score - min_score)
 
@@ -167,11 +161,12 @@ class TimeSeriesCentralityView(CentralityView):
         time_series_end_date = request.query_params.get('time_series_end_date', None)
         if catalog_extension_name == '':
             catalog_extension_name = None
+        if time_series_start_date == '':
+            time_series_start_date = None
         mandatory_fields = {
             'node_type': node_type,
             'edge_type': edge_type,
             'catalog_base_name': catalog_base_name,
-            'time_series_start_date': time_series_start_date,
             'time_series_end_date': time_series_end_date,
         }
 
@@ -214,7 +209,7 @@ class TimeSeriesCentralityView(CentralityView):
 
         catalog_publication_dates = [datetime.strptime(date, '%Y-%m-%d').date() for date in catalog_publication_dates]
         catalog_publication_dates = sorted(catalog_publication_dates)
-        time_series_start_date = datetime.strptime(time_series_start_date, '%Y-%m-%d').date()
+        time_series_start_date = datetime.strptime(time_series_start_date, '%Y-%m-%d').date() if time_series_start_date else catalog_publication_dates[0]
         time_series_end_date = datetime.strptime(time_series_end_date, '%Y-%m-%d').date()
 
         if time_series_start_date < catalog_publication_dates[0]:
@@ -227,7 +222,7 @@ class TimeSeriesCentralityView(CentralityView):
         else:
             time_series_end_date = datetime.strftime(time_series_end_date, '%Y-%m-%d')
             
-        scores = self.centrality_service.calculate_centrality(user.username, catalog_base_name, catalog_extension_name, (node_type, edge_type), score_function, time_series_start_date, time_series_end_date)
+        scores = self.centrality_service.calculate_centrality(user.username, catalog_base_name, catalog_extension_name, (node_type, edge_type), score_function, time_series_start_date, time_series_end_date, catalog_publication_dates[0], catalog_publication_dates[-1])
 
         if score_function == self.centrality_service.betweenness_centrality and homogenous_graph_types[(node_type, edge_type)] == "UNDIRECTED":
 
@@ -235,49 +230,49 @@ class TimeSeriesCentralityView(CentralityView):
                 for result in scores[end_date]:
                     result["betweenness_centrality_score"] /= 2
 
-        return scores
+        return Response(scores, status=status.HTTP_200_OK)
     
 class TimeSeriesBetweennessCentralityView(TimeSeriesCentralityView):
 
     def get(self, request):
 
-        return Response(super().get_scores(request, TimeSeriesCentralityService.betweenness_centrality), status=status.HTTP_200_OK)
+        return super().get_scores(request, TimeSeriesCentralityService.betweenness_centrality)
     
 class TimeSeriesClosenessCentralityView(TimeSeriesCentralityView):
 
     def get(self, request):
 
-        return Response(super().get_scores(request, TimeSeriesCentralityService.closeness_centrality), status=status.HTTP_200_OK)
+        return super().get_scores(request, TimeSeriesCentralityService.closeness_centrality)
     
 class TimeSeriesEigenvectorCentralityView(TimeSeriesCentralityView):
 
     def get(self, request):
 
-        return Response(super().get_scores(request, TimeSeriesCentralityService.eigenvector_centrality), status=status.HTTP_200_OK)
+        return super().get_scores(request, TimeSeriesCentralityService.eigenvector_centrality)
     
 class TimeSeriesDegreeCentralityView(TimeSeriesCentralityView):
 
     def get(self, request):
 
-        return Response(super().get_scores(request, TimeSeriesCentralityService.degree_centrality), status=status.HTTP_200_OK)
+        return super().get_scores(request, TimeSeriesCentralityService.degree_centrality)
     
 class TimeSeriesPageRankView(TimeSeriesCentralityView):
 
     def get(self, request):
 
-        return Response(super().get_scores(request, TimeSeriesCentralityService.page_rank), status=status.HTTP_200_OK)
+        return super().get_scores(request, TimeSeriesCentralityService.page_rank)
     
 class TimeSeriesArticleRankView(TimeSeriesCentralityView):
 
     def get(self, request):
 
-        return Response(super().get_scores(request, TimeSeriesCentralityService.article_rank), status=status.HTTP_200_OK)
+        return super().get_scores(request, TimeSeriesCentralityService.article_rank)
     
 class TimeSeriesHarmonicCentralityView(TimeSeriesCentralityView):
 
     def get(self, request):
 
-        return Response(super().get_scores(request, TimeSeriesCentralityService.harmonic_centrality), status=status.HTTP_200_OK)
+        return super().get_scores(request, TimeSeriesCentralityService.harmonic_centrality)
 
 class DiffTimeSeriesCentralityView(TimeSeriesCentralityView):
 
@@ -329,6 +324,7 @@ class DiffTimeSeriesCentralityView(TimeSeriesCentralityView):
                         'citation_count': citation_count,
                         'reference_count': reference_count,
                         'title': title,
+                        'real_score': result[score_type],
                         score_type: result[score_type] - old_score
                     })
                 
@@ -350,51 +346,52 @@ class DiffTimeSeriesCentralityView(TimeSeriesCentralityView):
                         'h_index': h_index,
                         's2ag_url': s2ag_url,
                         'paper_count': paper_count,
+                        'real_score': result[score_type],
                         score_type: result[score_type] - old_score
                     })
 
             key_index += 1
 
-        return differential_scores
+        return Response(differential_scores, status=status.HTTP_200_OK)
 
 class DiffTimeSeriesBetweennessCentralityView(DiffTimeSeriesCentralityView):
 
     def get(self, request):
 
-        return Response(super().get_differetial_scores(request, TimeSeriesCentralityService.betweenness_centrality), status=status.HTTP_200_OK)
+        return super().get_differetial_scores(request, TimeSeriesCentralityService.betweenness_centrality)
     
 class DiffTimeSeriesClosenessCentralityView(DiffTimeSeriesCentralityView):
 
     def get(self, request):
 
-        return Response(super().get_differetial_scores(request, TimeSeriesCentralityService.closeness_centrality), status=status.HTTP_200_OK)
+        return super().get_differetial_scores(request, TimeSeriesCentralityService.closeness_centrality)
     
 class DiffTimeSeriesEigenvectorCentralityView(DiffTimeSeriesCentralityView):
 
     def get(self, request):
 
-        return Response(super().get_differetial_scores(request, TimeSeriesCentralityService.eigenvector_centrality), status=status.HTTP_200_OK)
+        return super().get_differetial_scores(request, TimeSeriesCentralityService.eigenvector_centrality)
     
 class DiffTimeSeriesDegreeCentralityView(DiffTimeSeriesCentralityView):
 
     def get(self, request):
 
-        return Response(super().get_differetial_scores(request, TimeSeriesCentralityService.degree_centrality), status=status.HTTP_200_OK)
+        return super().get_differetial_scores(request, TimeSeriesCentralityService.degree_centrality)
     
 class DiffTimeSeriesPageRankView(DiffTimeSeriesCentralityView):
 
     def get(self, request):
 
-        return Response(super().get_differetial_scores(request, TimeSeriesCentralityService.page_rank), status=status.HTTP_200_OK)
+        return super().get_differetial_scores(request, TimeSeriesCentralityService.page_rank)
     
 class DiffTimeSeriesArticleRankView(DiffTimeSeriesCentralityView):
 
     def get(self, request):
 
-        return Response(super().get_differetial_scores(request, TimeSeriesCentralityService.article_rank), status=status.HTTP_200_OK)
+        return super().get_differetial_scores(request, TimeSeriesCentralityService.article_rank)
     
 class DiffTimeSeriesHarmonicCentralityView(DiffTimeSeriesCentralityView):
 
     def get(self, request):
 
-        return Response(super().get_differetial_scores(request, TimeSeriesCentralityService.harmonic_centrality), status=status.HTTP_200_OK)
+        return super().get_differetial_scores(request, TimeSeriesCentralityService.harmonic_centrality)
