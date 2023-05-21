@@ -167,11 +167,12 @@ class TimeSeriesCentralityView(CentralityView):
         time_series_end_date = request.query_params.get('time_series_end_date', None)
         if catalog_extension_name == '':
             catalog_extension_name = None
+        if time_series_start_date == '':
+            time_series_start_date = None
         mandatory_fields = {
             'node_type': node_type,
             'edge_type': edge_type,
             'catalog_base_name': catalog_base_name,
-            'time_series_start_date': time_series_start_date,
             'time_series_end_date': time_series_end_date,
         }
 
@@ -214,7 +215,7 @@ class TimeSeriesCentralityView(CentralityView):
 
         catalog_publication_dates = [datetime.strptime(date, '%Y-%m-%d').date() for date in catalog_publication_dates]
         catalog_publication_dates = sorted(catalog_publication_dates)
-        time_series_start_date = datetime.strptime(time_series_start_date, '%Y-%m-%d').date()
+        time_series_start_date = datetime.strptime(time_series_start_date, '%Y-%m-%d').date() if time_series_start_date else catalog_publication_dates[0]
         time_series_end_date = datetime.strptime(time_series_end_date, '%Y-%m-%d').date()
 
         if time_series_start_date < catalog_publication_dates[0]:
