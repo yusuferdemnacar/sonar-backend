@@ -346,6 +346,7 @@ class DiffTimeSeriesCentralityView(TimeSeriesCentralityView):
                         'h_index': h_index,
                         's2ag_url': s2ag_url,
                         'paper_count': paper_count,
+                        'real_score': result[score_type],
                         score_type: result[score_type] - old_score
                     })
 
