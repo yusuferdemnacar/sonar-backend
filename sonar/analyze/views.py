@@ -324,6 +324,7 @@ class DiffTimeSeriesCentralityView(TimeSeriesCentralityView):
                         'citation_count': citation_count,
                         'reference_count': reference_count,
                         'title': title,
+                        'real_score': result[score_type],
                         score_type: result[score_type] - old_score
                     })
                 
