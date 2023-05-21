@@ -238,11 +238,11 @@ class TimeSeriesCentralityService(CentralityService):
 
                     for result_dict in result:
                         author_name = result_dict[graph_type[0]]['name']
-                        citation_count = result_dict[graph_type[0]]['citation_count']
+                        citation_count = result_dict[graph_type[0]]['citation_count'] if 'citation_count' in result_dict[graph_type[0]] else None
                         s2ag_id = result_dict[graph_type[0]]['s2ag_id']
-                        h_index = result_dict[graph_type[0]]['h_index']
-                        s2ag_url = result_dict[graph_type[0]]['s2ag_url']
-                        paper_count = result_dict[graph_type[0]]['paper_count']
+                        h_index = result_dict[graph_type[0]]['h_index'] if 'h_index' in result_dict[graph_type[0]] else None
+                        s2ag_url = result_dict[graph_type[0]]['s2ag_url'] if 's2ag_url' in result_dict[graph_type[0]] else None
+                        paper_count = result_dict[graph_type[0]]['paper_count'] if 'paper_count' in result_dict[graph_type[0]] else None
                         result_dict.pop(graph_type[0])
                         result_dict['name'] = author_name
                         result_dict['citation_count'] = citation_count
