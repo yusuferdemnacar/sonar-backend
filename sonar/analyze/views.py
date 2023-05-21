@@ -325,8 +325,8 @@ class DiffTimeSeriesCentralityView(TimeSeriesCentralityView):
                         'citation_count': citation_count,
                         'reference_count': reference_count,
                         'title': title,
-                        'real_score': result[score_type],
-                        score_type: result[score_type] - old_score
+                        score_type: result[score_type],
+                        score_type + "_diff": result[score_type] - old_score
                     })
                 
                 elif graph_type == ("Author", "COAUTHOR_OF"):
@@ -347,8 +347,8 @@ class DiffTimeSeriesCentralityView(TimeSeriesCentralityView):
                         'h_index': h_index,
                         's2ag_url': s2ag_url,
                         'paper_count': paper_count,
-                        'real_score': result[score_type],
-                        score_type: result[score_type] - old_score
+                        score_type: result[score_type],
+                        score_type + "_diff": result[score_type] - old_score
                     })
 
             key_index += 1
