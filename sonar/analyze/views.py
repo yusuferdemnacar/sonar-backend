@@ -286,7 +286,14 @@ class DiffTimeSeriesCentralityView(TimeSeriesCentralityView):
     
     def get_differetial_scores(self, request, score_function):
 
-        scores = self.get_scores(request, score_function).data
+        #TODO: Take response creation to the outermost function
+
+        scores = self.get_scores(request, score_function)
+
+        if scores.status_code != status.HTTP_200_OK:
+            return scores
+        
+        scores = scores.data
 
         node_type = request.query_params.get('node_type', None)
         edge_type = request.query_params.get('edge_type', None)
