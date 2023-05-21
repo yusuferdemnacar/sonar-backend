@@ -199,14 +199,14 @@ class CentralityService():
     
 class TimeSeriesCentralityService(CentralityService):
 
-    def calculate_centrality(self, username, catalog_base_name, catalog_extension_name=None, graph_type=None, centrality_function=None, start_date=None, end_date=None):
+    def calculate_centrality(self, username, catalog_base_name, catalog_extension_name=None, graph_type=None, centrality_function=None, start_date=None, end_date=None, first_date=None, last_date=None):
         
         graph_name = username + '/' + catalog_base_name if catalog_extension_name is None else username + '/' + catalog_base_name + '/' + catalog_extension_name
 
         with self.neo4j_client.driver.session() as session:
             
             results = {}
-            
+
             current_end_date = datetime.strptime(start_date, "%Y-%m-%d").date()
 
             while current_end_date <= datetime.strptime(end_date, "%Y-%m-%d").date():
@@ -214,7 +214,7 @@ class TimeSeriesCentralityService(CentralityService):
                 print(start_date, datetime.strftime(current_end_date, "%Y-%m-%d")) 
 
                 current_end_date_str = current_end_date.strftime("%Y-%m-%d")
-                ProjectionService._create_named_graph(session, username, catalog_base_name, catalog_extension_name, graph_type, start_date, current_end_date_str)
+                ProjectionService._create_named_graph(session, username, catalog_base_name, catalog_extension_name, graph_type, first_date, current_end_date_str)
                 result = session.execute_read(centrality_function, graph_name, graph_type)
 
                 if graph_type == ('Article', 'CITES'):
