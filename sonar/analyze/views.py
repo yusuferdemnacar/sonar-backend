@@ -322,7 +322,7 @@ class DiffTimeSeriesCentralityView(TimeSeriesCentralityView):
                     citation_count = result['citation_count']
                     reference_count = result['reference_count']
                     title = result['title']
-                    if doi in [score['doi'] for score in scores[sorted_dates[key_index - 1]]]:
+                    if key_index > 0 and (doi in [score['doi'] for score in scores[sorted_dates[key_index - 1]]]):
                         old_score = [score[score_type] for score in scores[sorted_dates[key_index - 1]] if score['doi'] == doi][0]
                     else:
                         old_score = result[score_type]
@@ -345,8 +345,10 @@ class DiffTimeSeriesCentralityView(TimeSeriesCentralityView):
                     s2ag_url = result['s2ag_url']
                     paper_count = result['paper_count']
                     old_score = 0
-                    if s2ag_id in [score['s2ag_id'] for score in scores[sorted_dates[key_index - 1]]]:
+                    if key_index > 0 and (s2ag_id in [score['s2ag_id'] for score in scores[sorted_dates[key_index - 1]]]):
                         old_score = [score[score_type] for score in scores[sorted_dates[key_index - 1]] if score['s2ag_id'] == s2ag_id][0]
+                    else:
+                        old_score = result[score_type]
                     differential_scores[key].append({
                         'name': author_name,
                         'citation_count': citation_count,
