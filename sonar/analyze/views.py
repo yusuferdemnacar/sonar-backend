@@ -286,7 +286,14 @@ class DiffTimeSeriesCentralityView(TimeSeriesCentralityView):
     
     def get_differetial_scores(self, request, score_function):
 
+        #TODO: Take response creation to the outermost function
+
         scores = self.get_scores(request, score_function)
+
+        if scores.status_code != status.HTTP_200_OK:
+            return scores
+        
+        scores = scores.data
 
         node_type = request.query_params.get('node_type', None)
         edge_type = request.query_params.get('edge_type', None)
@@ -315,17 +322,18 @@ class DiffTimeSeriesCentralityView(TimeSeriesCentralityView):
                     citation_count = result['citation_count']
                     reference_count = result['reference_count']
                     title = result['title']
-                    old_score = 0
-                    if doi in [score['doi'] for score in scores[sorted_dates[key_index - 1]]]:
+                    if key_index > 0 and (doi in [score['doi'] for score in scores[sorted_dates[key_index - 1]]]):
                         old_score = [score[score_type] for score in scores[sorted_dates[key_index - 1]] if score['doi'] == doi][0]
+                    else:
+                        old_score = result[score_type]
                     differential_scores[key].append({
                         'doi': doi,
                         'publication_date': publication_date,
                         'citation_count': citation_count,
                         'reference_count': reference_count,
                         'title': title,
-                        'real_score': result[score_type],
-                        score_type: result[score_type] - old_score
+                        score_type: result[score_type],
+                        score_type + "_diff": result[score_type] - old_score
                     })
                 
                 elif graph_type == ("Author", "COAUTHOR_OF"):
@@ -337,8 +345,10 @@ class DiffTimeSeriesCentralityView(TimeSeriesCentralityView):
                     s2ag_url = result['s2ag_url']
                     paper_count = result['paper_count']
                     old_score = 0
-                    if s2ag_id in [score['s2ag_id'] for score in scores[sorted_dates[key_index - 1]]]:
+                    if key_index > 0 and (s2ag_id in [score['s2ag_id'] for score in scores[sorted_dates[key_index - 1]]]):
                         old_score = [score[score_type] for score in scores[sorted_dates[key_index - 1]] if score['s2ag_id'] == s2ag_id][0]
+                    else:
+                        old_score = result[score_type]
                     differential_scores[key].append({
                         'name': author_name,
                         'citation_count': citation_count,
@@ -346,8 +356,8 @@ class DiffTimeSeriesCentralityView(TimeSeriesCentralityView):
                         'h_index': h_index,
                         's2ag_url': s2ag_url,
                         'paper_count': paper_count,
-                        'real_score': result[score_type],
-                        score_type: result[score_type] - old_score
+                        score_type: result[score_type],
+                        score_type + "_diff": result[score_type] - old_score
                     })
 
             key_index += 1
