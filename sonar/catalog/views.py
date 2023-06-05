@@ -682,6 +682,29 @@ def get_article_with_doi(request):
 
     return Response(article, status=status.HTTP_200_OK)
 
+@api_view(['GET',])
+@permission_classes([IsAuthenticated])
+def get_author_with_s2ag_id(request):
+    request_validator = RequestValidator()
+    neo4j_client = Neo4jClient()
+    catalog_service = CatalogService(neo4j_client)
+
+    user = request.user
+    s2ag_id = request.query_params.get('s2ag_id', None)
+    fields = {
+        's2ag_id': s2ag_id
+    }
+
+    validation_result = request_validator.validate(fields)
+
+    if validation_result:
+        return validation_result
+
+    author = catalog_service.get_existing_author_with_s2ag_id(s2ag_id)
+    if not author:
+        return Response({'error': 'author not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    return Response(author, status=status.HTTP_200_OK)
 
 @api_view(['GET',])
 @permission_classes([IsAuthenticated])
