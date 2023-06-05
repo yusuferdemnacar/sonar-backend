@@ -85,7 +85,7 @@ class CatalogService():
         """.format(weight_name=weight_name)
 
         self.neo4j_client.run(weight_deletion_query)
-        self.neo4j_client.run(deletion_query, parameters={catalog_base_name: catalog_base_name, "username": username, "catalog_extension_name": catalog_extension_name})
+        self.neo4j_client.run(deletion_query, parameters={"catalog_base_name": catalog_base_name, "username": username, "catalog_extension_name": catalog_extension_name})
 
     def create_article_patterns(self, article_bundles):
         
