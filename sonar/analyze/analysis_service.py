@@ -165,13 +165,37 @@ class CentralityService():
 
         if graph_type == ('Article', 'CITES'):
 
-            degree_query = """CALL gds.degree.stream('{graph_name}') YIELD nodeId, score RETURN gds.util.asNode(nodeId) AS {node_type}, score AS degree_centrality_score ORDER BY score DESC""".format(graph_name=graph_name, node_type=graph_type[0])
+            degree_query = """CALL gds.degree.stream('{graph_name}', {{orientation: 'UNDIRECTED'}}) YIELD nodeId, score RETURN gds.util.asNode(nodeId) AS {node_type}, score AS degree_centrality_score ORDER BY score DESC""".format(graph_name=graph_name, node_type=graph_type[0])
 
         elif graph_type == ('Author', 'COAUTHOR_OF'):
 
             degree_query = """CALL gds.degree.stream('{graph_name}', {{relationshipWeightProperty: 'weight'}}) YIELD nodeId, score RETURN gds.util.asNode(nodeId) AS {node_type}, score AS degree_centrality_score ORDER BY score DESC""".format(graph_name=graph_name, node_type=graph_type[0])
 
         return tx.run(degree_query).data()
+    
+    def indegree_centrality(tx, graph_name, graph_type):
+
+        if graph_type == ('Article', 'CITES'):
+
+            indegree_query = """CALL gds.degree.stream('{graph_name}', {{orientation: 'REVERSE'}}) YIELD nodeId, score RETURN gds.util.asNode(nodeId) AS {node_type}, score AS indegree_centrality_score ORDER BY score DESC""".format(graph_name=graph_name, node_type=graph_type[0])
+
+        elif graph_type == ('Author', 'COAUTHOR_OF'):
+
+            indegree_query = """CALL gds.degree.stream('{graph_name}', {{relationshipWeightProperty: 'weight'}}) YIELD nodeId, score RETURN gds.util.asNode(nodeId) AS {node_type}, score AS indegree_centrality_score ORDER BY score DESC""".format(graph_name=graph_name, node_type=graph_type[0])
+
+        return tx.run(indegree_query).data()
+    
+    def outdegree_centrality(tx, graph_name, graph_type):
+
+        if graph_type == ('Article', 'CITES'):
+
+            outdegree_query = """CALL gds.degree.stream('{graph_name}', {{orientation: 'NATURAL'}}) YIELD nodeId, score RETURN gds.util.asNode(nodeId) AS {node_type}, score AS outdegree_centrality_score ORDER BY score DESC""".format(graph_name=graph_name, node_type=graph_type[0])
+
+        elif graph_type == ('Author', 'COAUTHOR_OF'):
+
+            outdegree_query = """CALL gds.degree.stream('{graph_name}', {{relationshipWeightProperty: 'weight'}}) YIELD nodeId, score RETURN gds.util.asNode(nodeId) AS {node_type}, score AS outdegree_centrality_score ORDER BY score DESC""".format(graph_name=graph_name, node_type=graph_type[0])
+
+        return tx.run(outdegree_query).data()
         
     def article_rank(tx, graph_name, graph_type):
 

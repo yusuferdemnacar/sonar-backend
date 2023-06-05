@@ -29,7 +29,7 @@ class CentralityView(APIView):
         self.catalog_service = CatalogService(self.neo4j_client)
         self.centrality_service = CentralityService(self.neo4j_client)
 
-    def get_score(self, request, score_function):
+    def get_score(self, request, score_function, orientation='NATURAL'):
 
         user = request.user
 
@@ -124,6 +124,18 @@ class DegreeCentralityView(CentralityView):
     def get(self, request):
 
         return super().get_score(request, CentralityService.degree_centrality)
+    
+class InDegreeCentralityView(CentralityView):
+
+    def get(self, request):
+
+        return super().get_score(request, CentralityService.indegree_centrality)
+    
+class OutDegreeCentralityView(CentralityView):
+
+    def get(self, request):
+
+        return super().get_score(request, CentralityService.outdegree_centrality)
     
 class PageRankView(CentralityView):
 
@@ -256,6 +268,18 @@ class TimeSeriesDegreeCentralityView(TimeSeriesCentralityView):
 
         return super().get_scores(request, TimeSeriesCentralityService.degree_centrality)
     
+class TimeSeriesInDegreeCentralityView(TimeSeriesCentralityView):
+
+    def get(self, request):
+
+        return super().get_scores(request, TimeSeriesCentralityService.indegree_centrality)
+    
+class TimeSeriesOutDegreeCentralityView(TimeSeriesCentralityView):
+
+    def get(self, request):
+
+        return super().get_scores(request, TimeSeriesCentralityService.outdegree_centrality)
+    
 class TimeSeriesPageRankView(TimeSeriesCentralityView):
 
     def get(self, request):
@@ -387,6 +411,18 @@ class DiffTimeSeriesDegreeCentralityView(DiffTimeSeriesCentralityView):
     def get(self, request):
 
         return super().get_differetial_scores(request, TimeSeriesCentralityService.degree_centrality)
+    
+class DiffTimeSeriesInDegreeCentralityView(DiffTimeSeriesCentralityView):
+
+    def get(self, request):
+
+        return super().get_differetial_scores(request, TimeSeriesCentralityService.indegree_centrality)
+    
+class DiffTimeSeriesOutDegreeCentralityView(DiffTimeSeriesCentralityView):
+
+    def get(self, request):
+
+        return super().get_differetial_scores(request, TimeSeriesCentralityService.outdegree_centrality)
     
 class DiffTimeSeriesPageRankView(DiffTimeSeriesCentralityView):
 
