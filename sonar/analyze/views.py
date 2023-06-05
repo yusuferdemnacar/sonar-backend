@@ -29,7 +29,7 @@ class CentralityView(APIView):
         self.catalog_service = CatalogService(self.neo4j_client)
         self.centrality_service = CentralityService(self.neo4j_client)
 
-    def get_score(self, request, score_function, orientation='NATURAL'):
+    def get_score(self, request, score_function):
 
         user = request.user
 
@@ -78,14 +78,6 @@ class CentralityView(APIView):
         
         scores = self.centrality_service.calculate_centrality(user.username, catalog_base_name, catalog_extension_name, (node_type, edge_type), score_function)
 
-        score_type = [key for key in scores[0].keys() if "score" in key][0]
-        min_score = scores[-1][score_type]
-        max_score = scores[0][score_type]
-
-        if score_function.__name__ == "betweenness_centrality" and homogenous_graph_types[(node_type, edge_type)] == "UNDIRECTED":
-            for result in scores:
-                result["betweenness_centrality_score"] = (result["betweenness_centrality_score"] - min_score) / (max_score - min_score)
-
         for score in scores:
             if node_type == "Article":
                 score['Article'] = {'doi': score['Article']['doi'],
@@ -98,6 +90,11 @@ class CentralityView(APIView):
                          'publication_types': score['Article'].get('publication_types', None),
                          'publication_date': score['Article'].get('publication_date', None, ),
                          }
+                
+        if score_function == CentralityService.betweenness_centrality and homogenous_graph_types[(node_type, edge_type)] == "UNDIRECTED":
+            
+            for result in scores:
+                result["betweenness_centrality_score"] /= 2
 
         return Response(scores, status=status.HTTP_200_OK)
 
@@ -236,7 +233,7 @@ class TimeSeriesCentralityView(CentralityView):
             
         scores = self.centrality_service.calculate_centrality(user.username, catalog_base_name, catalog_extension_name, (node_type, edge_type), score_function, time_series_start_date, time_series_end_date, catalog_publication_dates[0], catalog_publication_dates[-1])
 
-        if score_function == self.centrality_service.betweenness_centrality and homogenous_graph_types[(node_type, edge_type)] == "UNDIRECTED":
+        if score_function == CentralityService.betweenness_centrality and homogenous_graph_types[(node_type, edge_type)] == "UNDIRECTED":
 
             for end_date in scores.keys():
                 for result in scores[end_date]:
