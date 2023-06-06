@@ -85,7 +85,7 @@ class CatalogService():
         """.format(weight_name=weight_name)
 
         self.neo4j_client.run(weight_deletion_query)
-        self.neo4j_client.run(deletion_query, parameters={catalog_base_name: catalog_base_name, "username": username, "catalog_extension_name": catalog_extension_name})
+        self.neo4j_client.run(deletion_query, parameters={"catalog_base_name": catalog_base_name, "username": username, "catalog_extension_name": catalog_extension_name})
 
     def create_article_patterns(self, article_bundles):
         
@@ -613,6 +613,20 @@ class CatalogService():
         authors = [Author(**record["author"]) for record in result]
 
         return authors
+    
+    def get_existing_author_with_s2ag_id(self, s2ag_id):
+
+        query = """
+            MATCH (a:Author)
+            WHERE a.s2ag_id = $s2ag_id
+            RETURN a AS author
+        """
+
+        result = self.neo4j_client.run(query, parameters={"s2ag_id": s2ag_id})
+
+        author = [Author(**record["author"]) for record in result]
+
+        return author
 
     def get_all_catalog_bases_of_user(self, username) -> List[CatalogBase]:
 

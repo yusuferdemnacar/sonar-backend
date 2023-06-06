@@ -10,5 +10,6 @@ urlpatterns = [
     path("base/articles/", get_catalog_base_articles, name="base articles"),
     path("extension/names/", get_catalog_extension_names, name="extension articles"),
     path("article/", get_article_with_doi, name="article"),
+    path("author/", get_author_with_s2ag_id, name="author"),
     path("base/extension/", get_extension_articles_of_catalog_base, name="article"),
 ]

@@ -216,7 +216,7 @@ class TimeSeriesCentralityView(CentralityView):
             catalog_extension_articles = self.catalog_service.get_extension_articles(user.username, catalog_base_name, catalog_extension_name)
             catalog_publication_dates.extend([article['publication_date'] for article in catalog_extension_articles])
 
-        catalog_publication_dates = [datetime.strptime(date, '%Y-%m-%d').date() for date in catalog_publication_dates]
+        catalog_publication_dates = [datetime.strptime(date, '%Y-%m-%d').date() for date in catalog_publication_dates if date]
         catalog_publication_dates = sorted(catalog_publication_dates)
         time_series_start_date = datetime.strptime(time_series_start_date, '%Y-%m-%d').date() if time_series_start_date else catalog_publication_dates[0]
         time_series_end_date = datetime.strptime(time_series_end_date, '%Y-%m-%d').date()

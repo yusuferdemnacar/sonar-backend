@@ -18,6 +18,7 @@ class S2AGService():
         article_bundle = {}
 
         retry_count = 0
+        base_doi = doi
         if doi.startswith("10.48550/arXiv."):
             doi=doi.replace("10.48550/arXiv.", "ARXIV:")
         while True:
@@ -54,7 +55,7 @@ class S2AGService():
                 if outbound_citation_article["inbound_citation_count"] > 10000:
                     rdb_outbound_citations.append(Citation(citing_article_doi=doi, cited_article_doi=outbound_citation_article["doi"]))
 
-            article_dict["doi"] = doi
+            article_dict["doi"] = base_doi
             # article_dict["external_ids"] = {}
             # for external_id_type in s2ag_article_details_response_dict["externalIds"].keys():
             #     if external_id_type != "DOI":
