@@ -494,7 +494,7 @@ class CatalogService():
 
         result = self.neo4j_client.run(query, parameters={"catalog_base_name": catalog_base_name, "extension_name": extension_name,"username": username})
 
-        count = int(result["article_count"])
+        count = int(result[0]["article_count"])
 
         return count
 

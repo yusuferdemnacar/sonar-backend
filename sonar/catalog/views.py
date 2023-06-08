@@ -6,6 +6,8 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework import status
+
+from article.schemas import Article
 from .serializers import *
 
 from rest_framework.decorators import api_view, permission_classes
@@ -377,7 +379,7 @@ class CatalogExtensionView(APIView):
             for article in base_articles:
                 outbound_citation_count += article["outbound_citation_count"]
 
-            if outbound_citation_count > 1000:
+            if outbound_citation_count > 10000:
                 return Response({'error': 'too many outbound citations'}, status=status.HTTP_400_BAD_REQUEST)
             
             base_article_dois = [article["doi"] for article in base_articles]
@@ -400,7 +402,7 @@ class CatalogExtensionView(APIView):
             t = time.time()
 
             # split new articles into bundles of 1000
-            new_article_bundle_batches = [new_article_bundles[i:i+1000] for i in range(0, len(new_article_bundles), 1000)]
+            new_article_bundle_batches = [new_article_bundles[i:i+50] for i in range(0, len(new_article_bundles), 50)]
 
             batch = 0
 
@@ -595,7 +597,7 @@ def get_catalog_extension_articles(request):
     if not catalog_extension_exists:
         return Response({'error': 'catalog extension not found'}, status=status.HTTP_404_NOT_FOUND)
 
-    catalog_extension_articles_count = catalog_service.get_base_articles_count(user.username, catalog_base_name)
+    catalog_extension_articles_count = catalog_service.get_extension_articles_count(user.username, catalog_base_name, catalog_extension_name)
     catalog_extension_articles = catalog_service.get_extension_articles_with_pagination(user.username, catalog_base_name, catalog_extension_name, (offset - 1) * 25, (offset) * 25)
     data = {
     'articles': catalog_extension_articles,
@@ -757,10 +759,29 @@ def get_extension_articles_of_catalog_base(request):
     if 'outbound' in options:
         outbound_citation_article_dois = s2ag_service.get_outbound_citation_article_dois(base_article_dois)
 
-    new_article_dois = set(inbound_citation_article_dois + outbound_citation_article_dois)
+    new_article_dois = set(inbound_citation_article_dois + [doi_dict['doi'] for doi_dict in outbound_citation_article_dois ])
 
     new_article_dois = new_article_dois - set(base_article_dois)
 
-    new_article_bundles = s2ag_service.get_multiple_articles(list(new_article_dois))
+    new_article_bundles = s2ag_service.get_articles(new_article_dois)
 
-    return Response(new_article_bundles, status=status.HTTP_200_OK)
+    response_data = []
+    for bundle in new_article_bundles:
+        article = Article(
+            doi=bundle['article']['doi'],
+            title=bundle['article'].get('title', None),
+            abstract=bundle['article'].get('abstract', None),
+            year=bundle['article'].get('year', None),
+            citation_count=bundle['article'].get('inbound_citation_count', None),
+            reference_count=bundle['article'].get('outbound_citation_count', None),
+            fields_of_study=bundle['article'].get('fields_of_study', None),
+            publication_types=bundle['article'].get('publication_types', None),
+            publication_date=bundle['article'].get('publication_date', None),
+            venue=bundle['article'].get('venue', None),
+            authors=bundle['authors'],
+            s2ag_url=bundle['article'].get('s2ag_url', None),
+            open_access_pdf=bundle['article'].get('open_access_pdf_url', None),
+        )
+        response_data.append(article)
+
+    return Response(response_data, status=status.HTTP_200_OK)
